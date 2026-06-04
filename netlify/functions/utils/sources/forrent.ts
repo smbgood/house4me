@@ -6,6 +6,17 @@ import { type NormalizedListingInput, type SearchConfig, type SourceAdapter } fr
 
 const BASE_URL = 'https://www.forrent.com';
 
+function resolveSearchUrl(config: SearchConfig): string {
+  const override = process.env['FORRENT_SEARCH_URL']?.trim();
+  if (override) {
+    return override;
+  }
+
+  const locality = config.zip ? `${config.city},${config.state},${config.zip}` : `${config.city},${config.state}`;
+  const query = locality.replace(/\s+/g, '-');
+  return `${BASE_URL}/find/${query}`;
+}
+
 function extractFromCards($: cheerio.CheerioAPI): NormalizedListingInput[] {
   const listings: NormalizedListingInput[] = [];
 
@@ -39,9 +50,7 @@ function extractFromCards($: cheerio.CheerioAPI): NormalizedListingInput[] {
 }
 
 async function fetchListings(config: SearchConfig): Promise<NormalizedListingInput[]> {
-  const locality = config.zip ? `${config.city},${config.state},${config.zip}` : `${config.city},${config.state}`;
-  const query = locality.replace(/\s+/g, '-');
-  const searchUrl = `${BASE_URL}/find/${query}`;
+  const searchUrl = resolveSearchUrl(config);
   const html = await fetchHtml(searchUrl);
   const $ = cheerio.load(html);
 

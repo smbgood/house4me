@@ -5,6 +5,7 @@ import { inferFenceValue, inferPetsValue, parseNumber, parseRent, toAbsoluteUrl 
 import { type NormalizedListingInput, type SearchConfig, type SourceAdapter } from './types';
 
 const BASE_URL = 'https://www.zillow.com';
+const PRICE_TEXT_REGEX = /\$\s?\d[\d,]*/;
 
 function parseJsonObject(raw: string): unknown[] {
   try {
@@ -94,9 +95,46 @@ function mapCandidateToListing(candidate: unknown, pageText: string): Normalized
   };
 }
 
-async function fetchListings(config: SearchConfig): Promise<NormalizedListingInput[]> {
+function extractListingsFromPriceAnchors($: cheerio.CheerioAPI, pageText: string): NormalizedListingInput[] {
+  const listings: NormalizedListingInput[] = [];
+
+  $('a[href]').each((_, element) => {
+    const link = $(element);
+    const anchorText = link.text().replace(/\s+/g, ' ').trim();
+    if (!anchorText || !PRICE_TEXT_REGEX.test(anchorText)) {
+      return;
+    }
+
+    const listingUrl = toAbsoluteUrl(link.attr('href'), BASE_URL);
+    if (!listingUrl) {
+      return;
+    }
+
+    listings.push({
+      source: 'zillow',
+      listingUrl,
+      rentPrice: parseRent(anchorText),
+      allowsPets: inferPetsValue(`${anchorText} ${pageText}`),
+      hasFence: inferFenceValue(`${anchorText} ${pageText}`),
+      rawSnippet: anchorText
+    });
+  });
+
+  return listings;
+}
+
+function resolveSearchUrl(config: SearchConfig): string {
+  const override = process.env['ZILLOW_SEARCH_URL']?.trim();
+  if (override) {
+    return override;
+  }
+
   const query = `${config.city}-${config.state}`.replace(/\s+/g, '-');
-  const searchUrl = `${BASE_URL}/homes/for_rent/${query}_rb/`;
+  return `${BASE_URL}/homes/for_rent/${query}_rb/`;
+}
+
+async function fetchListings(config: SearchConfig): Promise<NormalizedListingInput[]> {
+  const searchUrl = resolveSearchUrl(config);
   const html = await fetchHtml(searchUrl);
 
   const $ = cheerio.load(html);
@@ -107,9 +145,10 @@ async function fetchListings(config: SearchConfig): Promise<NormalizedListingInp
   const mapped = candidates
     .map((candidate) => mapCandidateToListing(candidate, pageText))
     .filter((listing): listing is NormalizedListingInput => Boolean(listing));
+  const fromAnchors = extractListingsFromPriceAnchors($, pageText);
 
   const deduped = new Map<string, NormalizedListingInput>();
-  for (const listing of mapped) {
+  for (const listing of [...mapped, ...fromAnchors]) {
     deduped.set(listing.listingUrl, listing);
   }
 

@@ -6,6 +6,16 @@ import { type NormalizedListingInput, type SearchConfig, type SourceAdapter } fr
 
 const BASE_URL = 'https://www.trulia.com';
 
+function resolveSearchUrl(config: SearchConfig): string {
+  const override = process.env['TRULIA_SEARCH_URL']?.trim();
+  if (override) {
+    return override;
+  }
+
+  const query = `${config.city}-${config.state}`.replace(/\s+/g, '-');
+  return `${BASE_URL}/for_rent/${query}/`;
+}
+
 function tryParseJson(text: string): unknown | null {
   try {
     return JSON.parse(text) as unknown;
@@ -102,8 +112,7 @@ function mapListing(candidate: unknown, pageText: string): NormalizedListingInpu
 }
 
 async function fetchListings(config: SearchConfig): Promise<NormalizedListingInput[]> {
-  const query = `${config.city}-${config.state}`.replace(/\s+/g, '-');
-  const searchUrl = `${BASE_URL}/for_rent/${query}/`;
+  const searchUrl = resolveSearchUrl(config);
   const html = await fetchHtml(searchUrl);
 
   const $ = cheerio.load(html);
