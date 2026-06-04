@@ -3,6 +3,8 @@
 const PRICE_TEXT_REGEX = /\$\s?\d[\d,]*/;
 const BEDROOMS_REGEX = /(\d+(?:\.\d+)?)\s*(?:bd|bed|beds|bedroom|bedrooms)\b/i;
 const BATHROOMS_REGEX = /(\d+(?:\.\d+)?)\s*(?:ba|bath|baths|bathroom|bathrooms)\b/i;
+const TRULIA_LISTING_PATH_REGEX = /\/(for_rent|p|property|home)\//i;
+const BAD_HREF_REGEX = /^(#|javascript:|mailto:|tel:)/i;
 
 function normalizeText(value) {
   return (value ?? '').replace(/\s+/g, ' ').trim();
@@ -33,24 +35,97 @@ function toAbsoluteUrl(urlValue) {
   }
 }
 
-function parseListingFromContainer(anchor, container) {
-  const containerText = normalizeText(container ? container.innerText : anchor.textContent);
+function getPreferredAnchor(container, source) {
+  if (!container) {
+    return null;
+  }
+
+  const anchors = [...container.querySelectorAll('a[href]')];
+  if (anchors.length === 0) {
+    return null;
+  }
+
+  if (source !== 'trulia') {
+    return anchors[0];
+  }
+
+  let bestAnchor = null;
+  let bestScore = Number.NEGATIVE_INFINITY;
+  anchors.forEach((anchor) => {
+    const href = normalizeText(anchor.getAttribute('href') ?? '');
+    if (!href || BAD_HREF_REGEX.test(href)) {
+      return;
+    }
+
+    const anchorText = normalizeText(anchor.textContent);
+    let score = 0;
+    if (TRULIA_LISTING_PATH_REGEX.test(href)) {
+      score += 20;
+    }
+    if (PRICE_TEXT_REGEX.test(anchorText)) {
+      score += 2;
+    }
+    if (anchorText.length > 8) {
+      score += 1;
+    }
+    if (href.startsWith('/')) {
+      score += 1;
+    }
+
+    if (score > bestScore) {
+      bestAnchor = anchor;
+      bestScore = score;
+    }
+  });
+
+  return bestAnchor ?? anchors[0];
+}
+
+function getTextFromSelectors(container, selectors) {
+  for (const selector of selectors) {
+    const element = container.querySelector(selector);
+    const value = normalizeText(element ? element.textContent : '');
+    if (value) {
+      return value;
+    }
+  }
+  return '';
+}
+
+function getFallbackTitle(containerText) {
+  const tokens = containerText
+    .split(/\s{2,}|\n+/)
+    .map((value) => normalizeText(value))
+    .filter(Boolean);
+  return (
+    tokens.find((value) => !PRICE_TEXT_REGEX.test(value) && /[a-z]/i.test(value) && value.length > 10) ??
+    ''
+  );
+}
+
+function parseListingFromContainer(anchor, container, source = null) {
+  const containerText = normalizeText(container ? container.innerText : anchor?.textContent);
   if (!PRICE_TEXT_REGEX.test(containerText)) {
     return null;
   }
 
-  const href = anchor.getAttribute('href');
+  const href = anchor?.getAttribute('href');
   const listingUrl = href ? toAbsoluteUrl(href) : null;
   if (!listingUrl) {
     return null;
   }
 
   const imageElement = container ? container.querySelector('img') : null;
-  const title = normalizeText(anchor.textContent).slice(0, 200) || null;
-  const addressElement = container
-    ? container.querySelector('[data-testid*="address"], [class*="address"], address')
-    : null;
-  const address = normalizeText(addressElement ? addressElement.textContent : '').slice(0, 240) || null;
+  const explicitTitle = container
+    ? getTextFromSelectors(container, ['[data-testid*="title"]', '[class*="title"]', 'h1', 'h2', 'h3'])
+    : '';
+  const anchorTitle = normalizeText(anchor?.textContent);
+  const titleText = explicitTitle || anchorTitle || getFallbackTitle(containerText);
+  const title = titleText ? titleText.slice(0, 200) : null;
+  const explicitAddress = container
+    ? getTextFromSelectors(container, ['[data-testid*="address"]', '[class*="address"]', '[class*="Address"]', 'address'])
+    : '';
+  const address = explicitAddress ? explicitAddress.slice(0, 240) : null;
 
   return {
     listingUrl,
@@ -65,24 +140,51 @@ function parseListingFromContainer(anchor, container) {
     bathrooms: parseFloatOrNull(containerText.match(BATHROOMS_REGEX)),
     rawSnippet: containerText.slice(0, 700),
     rawPayload: {
-      scannedFrom: window.location.href
+      scannedFrom: window.location.href,
+      source,
+      containerTag: container?.tagName ?? null,
+      containerClass: normalizeText(container?.className ?? '')
     }
   };
 }
 
 function scrapeTruliaListingsFromPage() {
   const deduped = new Map();
-  const anchors = document.querySelectorAll('a[href]');
+  const cards = document.querySelectorAll(
+    'li, article, [data-testid*="card"], [class*="card"], [class*="Card"], [data-testid*="property"]'
+  );
 
-  anchors.forEach((anchor) => {
-    const container =
-      anchor.closest('article, li, [data-testid*="card"], [class*="card"], [class*="Card"]') ?? anchor.parentElement;
-    const listing = parseListingFromContainer(anchor, container);
+  cards.forEach((card) => {
+    const cardText = normalizeText(card.innerText);
+    if (!PRICE_TEXT_REGEX.test(cardText)) {
+      return;
+    }
+
+    const anchor = getPreferredAnchor(card, 'trulia');
+    if (!anchor) {
+      return;
+    }
+
+    const listing = parseListingFromContainer(anchor, card, 'trulia');
     if (!listing) {
       return;
     }
 
     deduped.set(listing.listingUrl, listing);
+  });
+
+  if (deduped.size > 0) {
+    return [...deduped.values()];
+  }
+
+  const anchors = document.querySelectorAll('a[href]');
+  anchors.forEach((anchor) => {
+    const container =
+      anchor.closest('article, li, [data-testid*="card"], [class*="card"], [class*="Card"]') ?? anchor.parentElement;
+    const listing = parseListingFromContainer(anchor, container, 'trulia');
+    if (listing) {
+      deduped.set(listing.listingUrl, listing);
+    }
   });
 
   return [...deduped.values()];
@@ -98,7 +200,7 @@ function scrapeForRentListingsFromPage() {
       return;
     }
 
-    const listing = parseListingFromContainer(anchor, card);
+    const listing = parseListingFromContainer(anchor, card, 'forrent');
     if (!listing) {
       return;
     }
@@ -123,7 +225,7 @@ function scrapeZillowListingsFromPage() {
       return;
     }
 
-    const listing = parseListingFromContainer(anchor, card);
+    const listing = parseListingFromContainer(anchor, card, 'zillow');
     if (!listing) {
       return;
     }
