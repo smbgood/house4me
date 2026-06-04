@@ -109,6 +109,35 @@ function scrapeForRentListingsFromPage() {
   return [...deduped.values()];
 }
 
+function scrapeZillowListingsFromPage() {
+  const deduped = new Map();
+  const cards = document.querySelectorAll(
+    '[data-test="property-card"], [data-test*="property-card"], article, li, [class*="StyledPropertyCardDataArea"]'
+  );
+
+  cards.forEach((card) => {
+    const anchor =
+      card.querySelector('a[href*="/homedetails/"], a[href*="/b/"], a[href*="/apartments/"], a[href*="/rental-manager/"]') ??
+      card.querySelector('a[href]');
+    if (!anchor) {
+      return;
+    }
+
+    const listing = parseListingFromContainer(anchor, card);
+    if (!listing) {
+      return;
+    }
+
+    deduped.set(listing.listingUrl, listing);
+  });
+
+  if (deduped.size > 0) {
+    return [...deduped.values()];
+  }
+
+  return scrapeTruliaListingsFromPage();
+}
+
 function getSourceFromHostname() {
   const hostname = window.location.hostname.toLowerCase();
   if (hostname.includes('trulia.com')) {
@@ -116,6 +145,9 @@ function getSourceFromHostname() {
   }
   if (hostname.includes('forrent.com')) {
     return 'forrent';
+  }
+  if (hostname.includes('zillow.com')) {
+    return 'zillow';
   }
   return null;
 }
@@ -134,7 +166,12 @@ browser.runtime.onMessage.addListener((message) => {
     });
   }
 
-  const listings = source === 'forrent' ? scrapeForRentListingsFromPage() : scrapeTruliaListingsFromPage();
+  const listings =
+    source === 'forrent'
+      ? scrapeForRentListingsFromPage()
+      : source === 'zillow'
+        ? scrapeZillowListingsFromPage()
+        : scrapeTruliaListingsFromPage();
   return Promise.resolve({
     source,
     listings,

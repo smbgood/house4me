@@ -15,7 +15,9 @@ async function getSettings() {
     'truliaIngestUrl',
     'truliaIngestToken',
     'forrentIngestUrl',
-    'forrentIngestToken'
+    'forrentIngestToken',
+    'zillowIngestUrl',
+    'zillowIngestToken'
   ]);
   return {
     truliaIngestUrl:
@@ -31,7 +33,9 @@ async function getSettings() {
           ? values.ingestToken.trim()
           : '',
     forrentIngestUrl: typeof values.forrentIngestUrl === 'string' ? values.forrentIngestUrl.trim() : '',
-    forrentIngestToken: typeof values.forrentIngestToken === 'string' ? values.forrentIngestToken.trim() : ''
+    forrentIngestToken: typeof values.forrentIngestToken === 'string' ? values.forrentIngestToken.trim() : '',
+    zillowIngestUrl: typeof values.zillowIngestUrl === 'string' ? values.zillowIngestUrl.trim() : '',
+    zillowIngestToken: typeof values.zillowIngestToken === 'string' ? values.zillowIngestToken.trim() : ''
   };
 }
 
@@ -53,15 +57,27 @@ async function scanCurrentPage() {
     source = 'trulia';
   } else if (tab.url.includes('forrent.com')) {
     source = 'forrent';
+  } else if (tab.url.includes('zillow.com')) {
+    source = 'zillow';
   }
 
   if (!source) {
-    setStatus('Active tab must be on Trulia or ForRent.');
+    setStatus('Active tab must be on Trulia, ForRent, or Zillow.');
     return;
   }
 
-  const ingestUrl = source === 'trulia' ? settings.truliaIngestUrl : settings.forrentIngestUrl;
-  const ingestToken = source === 'trulia' ? settings.truliaIngestToken : settings.forrentIngestToken;
+  const ingestUrl =
+    source === 'trulia'
+      ? settings.truliaIngestUrl
+      : source === 'forrent'
+        ? settings.forrentIngestUrl
+        : settings.zillowIngestUrl;
+  const ingestToken =
+    source === 'trulia'
+      ? settings.truliaIngestToken
+      : source === 'forrent'
+        ? settings.forrentIngestToken
+        : settings.zillowIngestToken;
   if (!ingestUrl || !ingestToken) {
     setStatus(`Missing ${source} ingest URL/token. Open options and configure them first.`);
     return;

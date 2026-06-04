@@ -34,6 +34,18 @@
         <label for="forrentIngestToken">ForRent Ingest Token</label>
         <input id="forrentIngestToken" name="forrentIngestToken" type="password" required />
 
+        <label for="zillowIngestUrl">Zillow Ingest URL</label>
+        <input
+          id="zillowIngestUrl"
+          name="zillowIngestUrl"
+          type="url"
+          required
+          placeholder="https://your-site.netlify.app/.netlify/functions/ingest-zillow-listings"
+        />
+
+        <label for="zillowIngestToken">Zillow Ingest Token</label>
+        <input id="zillowIngestToken" name="zillowIngestToken" type="password" required />
+
         <button type="submit">Save settings</button>
       </form>
       <p id="status"></p>

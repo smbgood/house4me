@@ -5,6 +5,8 @@ const truliaIngestUrlInput = document.getElementById('truliaIngestUrl');
 const truliaIngestTokenInput = document.getElementById('truliaIngestToken');
 const forrentIngestUrlInput = document.getElementById('forrentIngestUrl');
 const forrentIngestTokenInput = document.getElementById('forrentIngestToken');
+const zillowIngestUrlInput = document.getElementById('zillowIngestUrl');
+const zillowIngestTokenInput = document.getElementById('zillowIngestToken');
 const statusEl = document.getElementById('status');
 
 function setStatus(message) {
@@ -18,7 +20,9 @@ async function loadSettings() {
     'truliaIngestUrl',
     'truliaIngestToken',
     'forrentIngestUrl',
-    'forrentIngestToken'
+    'forrentIngestToken',
+    'zillowIngestUrl',
+    'zillowIngestToken'
   ]);
   truliaIngestUrlInput.value =
     typeof values.truliaIngestUrl === 'string'
@@ -34,6 +38,8 @@ async function loadSettings() {
         : '';
   forrentIngestUrlInput.value = typeof values.forrentIngestUrl === 'string' ? values.forrentIngestUrl : '';
   forrentIngestTokenInput.value = typeof values.forrentIngestToken === 'string' ? values.forrentIngestToken : '';
+  zillowIngestUrlInput.value = typeof values.zillowIngestUrl === 'string' ? values.zillowIngestUrl : '';
+  zillowIngestTokenInput.value = typeof values.zillowIngestToken === 'string' ? values.zillowIngestToken : '';
 }
 
 form.addEventListener('submit', (event) => {
@@ -43,7 +49,9 @@ form.addEventListener('submit', (event) => {
   const truliaIngestToken = truliaIngestTokenInput.value.trim();
   const forrentIngestUrl = forrentIngestUrlInput.value.trim();
   const forrentIngestToken = forrentIngestTokenInput.value.trim();
-  if (!truliaIngestUrl || !truliaIngestToken || !forrentIngestUrl || !forrentIngestToken) {
+  const zillowIngestUrl = zillowIngestUrlInput.value.trim();
+  const zillowIngestToken = zillowIngestTokenInput.value.trim();
+  if (!truliaIngestUrl || !truliaIngestToken || !forrentIngestUrl || !forrentIngestToken || !zillowIngestUrl || !zillowIngestToken) {
     setStatus('All fields are required.');
     return;
   }
@@ -54,6 +62,8 @@ form.addEventListener('submit', (event) => {
       truliaIngestToken,
       forrentIngestUrl,
       forrentIngestToken,
+      zillowIngestUrl,
+      zillowIngestToken,
       ingestUrl: truliaIngestUrl,
       ingestToken: truliaIngestToken
     })
