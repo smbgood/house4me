@@ -8,47 +8,12 @@ interface GoogleTokenResponse {
   error?: string;
 }
 
-interface GoogleUserInfoResponse {
-  email?: string;
-  email_verified?: boolean;
-}
-
 function getRequiredEnv(name: string): string {
   const value = process.env[name];
   if (!value) {
     throw new Error(`Missing required environment variable: ${name}`);
   }
   return value;
-}
-
-function getAllowedEmails(): Set<string> {
-  const csv = process.env['GOOGLE_AUTH_ALLOWED_EMAILS'] ?? '';
-  return new Set(
-    csv
-      .split(',')
-      .map((email) => email.trim().toLowerCase())
-      .filter(Boolean)
-  );
-}
-
-function isAuthorizedEmail(email: string): boolean {
-  const normalizedEmail = email.trim().toLowerCase();
-  const allowedEmails = getAllowedEmails();
-  const allowedDomain = (process.env['GOOGLE_AUTH_ALLOWED_DOMAIN'] ?? '').trim().toLowerCase();
-
-  if (!allowedDomain && allowedEmails.size === 0) {
-    return false;
-  }
-
-  if (allowedEmails.has(normalizedEmail)) {
-    return true;
-  }
-
-  if (allowedDomain) {
-    return normalizedEmail.endsWith(`@${allowedDomain}`);
-  }
-
-  return false;
 }
 
 export async function verifyGoogleRefreshToken(refreshToken: string): Promise<VerifiedGoogleToken> {
@@ -79,27 +44,7 @@ export async function verifyGoogleRefreshToken(refreshToken: string): Promise<Ve
     return { valid: false };
   }
 
-  const profileResponse = await fetch('https://openidconnect.googleapis.com/v1/userinfo', {
-    headers: {
-      Authorization: `Bearer ${tokenData.access_token}`
-    }
-  });
-
-  if (!profileResponse.ok) {
-    return { valid: false };
-  }
-
-  const profile = (await profileResponse.json()) as GoogleUserInfoResponse;
-  if (!profile.email || profile.email_verified !== true) {
-    return { valid: false };
-  }
-
-  if (!isAuthorizedEmail(profile.email)) {
-    return { valid: false };
-  }
-
   return {
-    valid: true,
-    email: profile.email
+    valid: true
   };
 }
