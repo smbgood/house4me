@@ -17,8 +17,13 @@ export class GoogleAuthService {
   constructor(private readonly http: HttpClient) {}
 
   initiateAuth(redirectUrl = '/'): void {
+    const clientId = environment.googleClientId.trim();
+    if (!clientId) {
+      throw new Error('Google OAuth client ID is not configured.');
+    }
+
     const authUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
-    authUrl.searchParams.set('client_id', environment.googleClientId);
+    authUrl.searchParams.set('client_id', clientId);
     authUrl.searchParams.set('redirect_uri', environment.googleRedirectUri);
     authUrl.searchParams.set('response_type', 'code');
     authUrl.searchParams.set('scope', this.scopes.join(' '));

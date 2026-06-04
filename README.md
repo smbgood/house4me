@@ -40,6 +40,10 @@ The Angular app environment files also need:
 - `googleClientId`
 - `googleRedirectUri`
 
+`googleClientId` is a public OAuth identifier (safe for frontend code), but it must match
+the same client configured for server-side token exchange in Netlify. Keep
+`GOOGLE_CLIENT_SECRET` only in Netlify/server environment variables and never in Angular files.
+
 Recommended redirect URIs:
 
 - Local: `http://localhost:4200/oauth-callback`
