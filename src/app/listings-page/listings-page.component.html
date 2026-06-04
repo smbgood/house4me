@@ -1,0 +1,94 @@
+<main class="page">
+  <header class="page-header">
+    <h1>House4Me Rental Aggregator</h1>
+    <p>View Zillow, Trulia, and ForRent listings in one place.</p>
+  </header>
+
+  <section class="filters">
+    <label>
+      Source
+      <select [(ngModel)]="source">
+        <option value="">All</option>
+        <option value="zillow">Zillow</option>
+        <option value="trulia">Trulia</option>
+        <option value="forrent">ForRent</option>
+      </select>
+    </label>
+
+    <label>
+      Pets
+      <select [(ngModel)]="pets">
+        <option value="">Any</option>
+        <option value="true">Allows pets</option>
+        <option value="false">No pets</option>
+      </select>
+    </label>
+
+    <label>
+      Fence
+      <select [(ngModel)]="fence">
+        <option value="">Any</option>
+        <option value="true">Fence required</option>
+        <option value="false">No fence</option>
+      </select>
+    </label>
+
+    <label>
+      Min rent
+      <input type="number" [(ngModel)]="minRent" />
+    </label>
+
+    <label>
+      Max rent
+      <input type="number" [(ngModel)]="maxRent" />
+    </label>
+
+    <label class="query">
+      Search
+      <input type="text" [(ngModel)]="query" placeholder="Address, city, title..." />
+    </label>
+
+    <div class="actions">
+      <button type="button" (click)="applyFilters()">Apply filters</button>
+      <button type="button" class="ghost" (click)="clearFilters()">Clear</button>
+    </div>
+  </section>
+
+  <section class="sync-status" *ngIf="syncStatus.length > 0">
+    <h2>Latest Sync Status</h2>
+    <div class="sync-grid">
+      <article *ngFor="let sync of syncStatus">
+        <h3>{{ sync.source | titlecase }}</h3>
+        <p>Status: <strong>{{ sync.status }}</strong></p>
+        <p>Found: {{ sync.listings_found }} | Upserted: {{ sync.listings_upserted }}</p>
+      </article>
+    </div>
+  </section>
+
+  <section *ngIf="loading" class="state">Loading listings...</section>
+  <section *ngIf="error" class="state error">{{ error }}</section>
+
+  <section *ngIf="!loading && !error" class="listings">
+    <article class="listing" *ngFor="let listing of listings; trackBy: trackById">
+      <div class="listing-main">
+        <h3>{{ listing.title || 'Untitled listing' }}</h3>
+        <p>{{ listing.address }}, {{ listing.city }}, {{ listing.state }} {{ listing.zip }}</p>
+        <p class="rent">{{ listing.rent_price ? ('$' + listing.rent_price) : 'Price unavailable' }}</p>
+        <p>
+          Pets:
+          <strong>{{
+            listing.allows_pets === null ? 'Unknown' : (listing.allows_pets ? 'Allowed' : 'Not allowed')
+          }}</strong>
+          | Fence:
+          <strong>{{ listing.has_fence === null ? 'Unknown' : (listing.has_fence ? 'Yes' : 'No') }}</strong>
+        </p>
+      </div>
+      <div class="listing-side">
+        <span class="source">{{ listing.source | titlecase }}</span>
+        <a [href]="listing.listing_url" target="_blank" rel="noopener noreferrer">Open listing</a>
+      </div>
+    </article>
+
+    <p *ngIf="listings.length === 0" class="state">No listings match current filters.</p>
+  </section>
+</main>

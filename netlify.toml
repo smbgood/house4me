@@ -1,0 +1,22 @@
+[build]
+  functions = "netlify/functions"
+  publish = "dist/house4me/browser"
+
+[build.environment]
+  NODE_VERSION = "22"
+
+[dev]
+  targetPort = 4200
+  port = 9999
+  framework = "angular"
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+[functions]
+  node_bundler = "esbuild"
+
+[functions.sync-listings]
+  schedule = "*/5 * * * *"
