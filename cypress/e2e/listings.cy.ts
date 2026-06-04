@@ -84,7 +84,13 @@ describe('Rental aggregator listing filters', () => {
   }
 
   beforeEach(() => {
+    cy.intercept('GET', 'http://localhost:9999/.netlify/functions/verify-google-token', {
+      statusCode: 200,
+      body: { success: true, email: 'authorized@example.com' }
+    }).as('verifyGoogleToken');
+
     cy.intercept('GET', 'http://localhost:9999/.netlify/functions/get-listings*', (req) => {
+      expect(req.headers).to.have.property('authorization');
       req.reply({
         statusCode: 200,
         body: {
@@ -96,7 +102,12 @@ describe('Rental aggregator listing filters', () => {
   });
 
   it('renders listings and applies filters', () => {
-    cy.visit('/');
+    cy.visit('/', {
+      onBeforeLoad(win) {
+        win.localStorage.setItem('google_refresh_token', 'test-refresh-token');
+      }
+    });
+    cy.wait('@verifyGoogleToken');
     cy.wait('@getListings');
     cy.contains('Blue Ranch').should('be.visible');
     cy.contains('City Duplex').should('be.visible');
@@ -115,4 +126,5 @@ describe('Rental aggregator listing filters', () => {
     cy.contains('Parkside Home').should('be.visible');
     cy.contains('Blue Ranch').should('not.exist');
   });
+
 });

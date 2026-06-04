@@ -1,4 +1,6 @@
 export interface Environment {
   production: boolean;
   apiUrl: string;
+  googleClientId: string;
+  googleRedirectUri: string;
 }

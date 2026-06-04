@@ -1,6 +1,7 @@
 import { Injectable } from '@angular/core';
 
 import { environment } from '../../environments/environment';
+import { GoogleAuthService } from './google-auth.service';
 
 export interface RentalListing {
   id: string;
@@ -46,6 +47,8 @@ export interface ListingsResponse {
   providedIn: 'root'
 })
 export class RentalListingsService {
+  constructor(private readonly googleAuthService: GoogleAuthService) {}
+
   async getListings(filters: ListingFilters): Promise<ListingsResponse> {
     const params = new URLSearchParams();
 
@@ -70,7 +73,12 @@ export class RentalListingsService {
 
     const qs = params.toString();
     const url = `${environment.apiUrl}/get-listings${qs ? `?${qs}` : ''}`;
-    const response = await fetch(url);
+    const refreshToken = this.googleAuthService.getRefreshToken();
+    const headers: HeadersInit = refreshToken
+      ? { Authorization: `Bearer ${refreshToken}` }
+      : {};
+
+    const response = await fetch(url, { headers });
     if (!response.ok) {
       throw new Error(`Failed to load listings (${response.status}).`);
     }

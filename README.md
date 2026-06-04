@@ -25,3 +25,22 @@ Run `ng e2e` to execute the end-to-end tests via a platform of your choice. To u
 ## Further help
 
 To get more help on the Angular CLI use `ng help` or go check out the [Angular CLI Overview and Command Reference](https://angular.io/cli) page.
+
+## Google auth gate configuration
+
+Configure these environment variables in Netlify for the Google OAuth gate:
+
+- `GOOGLE_CLIENT_ID`
+- `GOOGLE_CLIENT_SECRET`
+- `GOOGLE_REDIRECT_URI`
+- `GOOGLE_AUTH_ALLOWED_EMAILS` (comma-separated) or `GOOGLE_AUTH_ALLOWED_DOMAIN`
+
+The Angular app environment files also need:
+
+- `googleClientId`
+- `googleRedirectUri`
+
+Recommended redirect URIs:
+
+- Local: `http://localhost:4200/oauth-callback`
+- Production: `https://house4me.netlify.app/oauth-callback`
