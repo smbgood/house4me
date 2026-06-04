@@ -1,8 +1,8 @@
 import type { Handler } from '@netlify/functions';
 
 import { defaultHeaders, optionsResponse } from './utils/cors';
-import { buildListingHash } from './utils/sources/normalize';
-import { sourceAdapters, type NormalizedListingInput, type SearchConfig } from './utils/sources';
+import { upsertListingsAndSnapshots } from './utils/listing-upsert';
+import { sourceAdapters, type SearchConfig } from './utils/sources';
 import { supabaseAdmin } from './utils/supabase';
 
 interface SyncSummary {
@@ -35,30 +35,6 @@ function getSearchConfig(): SearchConfig {
     zip,
     radiusMiles: Number.isFinite(radiusMiles) ? radiusMiles : undefined,
     maxPrice: Number.isFinite(maxPrice) ? maxPrice : undefined
-  };
-}
-
-function toUpsertRow(listing: NormalizedListingInput) {
-  return {
-    source: listing.source,
-    source_listing_id: listing.sourceListingId ?? null,
-    listing_url: listing.listingUrl,
-    listing_url_hash: buildListingHash(listing.listingUrl),
-    image_url: listing.imageUrl ?? null,
-    title: listing.title ?? null,
-    address: listing.address ?? null,
-    city: listing.city ?? null,
-    state: listing.state ?? null,
-    zip: listing.zip ?? null,
-    rent_price: listing.rentPrice ?? null,
-    bedrooms: listing.bedrooms ?? null,
-    bathrooms: listing.bathrooms ?? null,
-    allows_pets: listing.allowsPets ?? null,
-    has_fence: listing.hasFence ?? null,
-    raw_snippet: listing.rawSnippet ?? null,
-    raw_payload: listing.rawPayload ?? null,
-    status: 'active',
-    last_seen_at: new Date().toISOString()
   };
 }
 
@@ -114,32 +90,7 @@ export const handler: Handler = async (event) => {
       const filtered = searchConfig.maxPrice
         ? listings.filter((listing) => !listing.rentPrice || listing.rentPrice <= searchConfig.maxPrice!)
         : listings;
-
-      const upsertRows = filtered.map((listing) => toUpsertRow(listing));
-      let upserted = 0;
-
-      if (upsertRows.length > 0) {
-        const upsertResult = await supabaseAdmin
-          .from('rental_listings')
-          .upsert(upsertRows, { onConflict: 'source,listing_url_hash' })
-          .select('id, rent_price, allows_pets, has_fence, status');
-
-        if (upsertResult.error) {
-          throw upsertResult.error;
-        }
-
-        upserted = upsertResult.data?.length ?? 0;
-        if (upsertResult.data && upsertResult.data.length > 0) {
-          const snapshotRows = upsertResult.data.map((row) => ({
-            listing_id: row.id,
-            rent_price: row.rent_price,
-            allows_pets: row.allows_pets,
-            has_fence: row.has_fence,
-            status: row.status
-          }));
-          await supabaseAdmin.from('rental_listing_snapshots').insert(snapshotRows);
-        }
-      }
+      const upserted = await upsertListingsAndSnapshots(filtered);
 
       await supabaseAdmin
         .from('source_sync_runs')

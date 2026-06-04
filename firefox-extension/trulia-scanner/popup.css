@@ -1,0 +1,46 @@
+body {
+  margin: 0;
+  padding: 12px;
+  font-family: Arial, sans-serif;
+  min-width: 320px;
+}
+
+h1 {
+  margin: 0 0 4px;
+  font-size: 18px;
+}
+
+.subtitle {
+  margin: 0 0 12px;
+  color: #444;
+  font-size: 13px;
+}
+
+.actions {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+button {
+  border: 1px solid #222;
+  background: #222;
+  color: #fff;
+  border-radius: 4px;
+  padding: 8px 10px;
+  cursor: pointer;
+}
+
+button.ghost {
+  background: #fff;
+  color: #222;
+}
+
+.status {
+  margin: 0;
+  padding: 8px;
+  background: #f4f4f4;
+  border-radius: 4px;
+  white-space: pre-wrap;
+  font-size: 12px;
+}
