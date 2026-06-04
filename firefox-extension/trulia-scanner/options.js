@@ -1,8 +1,10 @@
 /* global browser */
 
 const form = document.getElementById('settingsForm');
-const ingestUrlInput = document.getElementById('ingestUrl');
-const ingestTokenInput = document.getElementById('ingestToken');
+const truliaIngestUrlInput = document.getElementById('truliaIngestUrl');
+const truliaIngestTokenInput = document.getElementById('truliaIngestToken');
+const forrentIngestUrlInput = document.getElementById('forrentIngestUrl');
+const forrentIngestTokenInput = document.getElementById('forrentIngestToken');
 const statusEl = document.getElementById('status');
 
 function setStatus(message) {
@@ -10,23 +12,51 @@ function setStatus(message) {
 }
 
 async function loadSettings() {
-  const values = await browser.storage.local.get(['ingestUrl', 'ingestToken']);
-  ingestUrlInput.value = typeof values.ingestUrl === 'string' ? values.ingestUrl : '';
-  ingestTokenInput.value = typeof values.ingestToken === 'string' ? values.ingestToken : '';
+  const values = await browser.storage.local.get([
+    'ingestUrl',
+    'ingestToken',
+    'truliaIngestUrl',
+    'truliaIngestToken',
+    'forrentIngestUrl',
+    'forrentIngestToken'
+  ]);
+  truliaIngestUrlInput.value =
+    typeof values.truliaIngestUrl === 'string'
+      ? values.truliaIngestUrl
+      : typeof values.ingestUrl === 'string'
+        ? values.ingestUrl
+        : '';
+  truliaIngestTokenInput.value =
+    typeof values.truliaIngestToken === 'string'
+      ? values.truliaIngestToken
+      : typeof values.ingestToken === 'string'
+        ? values.ingestToken
+        : '';
+  forrentIngestUrlInput.value = typeof values.forrentIngestUrl === 'string' ? values.forrentIngestUrl : '';
+  forrentIngestTokenInput.value = typeof values.forrentIngestToken === 'string' ? values.forrentIngestToken : '';
 }
 
 form.addEventListener('submit', (event) => {
   event.preventDefault();
 
-  const ingestUrl = ingestUrlInput.value.trim();
-  const ingestToken = ingestTokenInput.value.trim();
-  if (!ingestUrl || !ingestToken) {
-    setStatus('Both fields are required.');
+  const truliaIngestUrl = truliaIngestUrlInput.value.trim();
+  const truliaIngestToken = truliaIngestTokenInput.value.trim();
+  const forrentIngestUrl = forrentIngestUrlInput.value.trim();
+  const forrentIngestToken = forrentIngestTokenInput.value.trim();
+  if (!truliaIngestUrl || !truliaIngestToken || !forrentIngestUrl || !forrentIngestToken) {
+    setStatus('All fields are required.');
     return;
   }
 
   void browser.storage.local
-    .set({ ingestUrl, ingestToken })
+    .set({
+      truliaIngestUrl,
+      truliaIngestToken,
+      forrentIngestUrl,
+      forrentIngestToken,
+      ingestUrl: truliaIngestUrl,
+      ingestToken: truliaIngestToken
+    })
     .then(() => setStatus('Settings saved.'))
     .catch((error) => setStatus(`Failed to save: ${String(error)}`));
 });

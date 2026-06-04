@@ -33,62 +33,110 @@ function toAbsoluteUrl(urlValue) {
   }
 }
 
-function scrapeListingsFromPage() {
+function parseListingFromContainer(anchor, container) {
+  const containerText = normalizeText(container ? container.innerText : anchor.textContent);
+  if (!PRICE_TEXT_REGEX.test(containerText)) {
+    return null;
+  }
+
+  const href = anchor.getAttribute('href');
+  const listingUrl = href ? toAbsoluteUrl(href) : null;
+  if (!listingUrl) {
+    return null;
+  }
+
+  const imageElement = container ? container.querySelector('img') : null;
+  const title = normalizeText(anchor.textContent).slice(0, 200) || null;
+  const addressElement = container
+    ? container.querySelector('[data-testid*="address"], [class*="address"], address')
+    : null;
+  const address = normalizeText(addressElement ? addressElement.textContent : '').slice(0, 240) || null;
+
+  return {
+    listingUrl,
+    title,
+    address,
+    city: null,
+    state: null,
+    zip: null,
+    imageUrl: imageElement ? imageElement.src : null,
+    rentPrice: parsePriceOrNull(containerText),
+    bedrooms: parseFloatOrNull(containerText.match(BEDROOMS_REGEX)),
+    bathrooms: parseFloatOrNull(containerText.match(BATHROOMS_REGEX)),
+    rawSnippet: containerText.slice(0, 700),
+    rawPayload: {
+      scannedFrom: window.location.href
+    }
+  };
+}
+
+function scrapeTruliaListingsFromPage() {
   const deduped = new Map();
   const anchors = document.querySelectorAll('a[href]');
 
   anchors.forEach((anchor) => {
-    const href = anchor.getAttribute('href');
-    const listingUrl = href ? toAbsoluteUrl(href) : null;
-    if (!listingUrl) {
-      return;
-    }
-
     const container =
       anchor.closest('article, li, [data-testid*="card"], [class*="card"], [class*="Card"]') ?? anchor.parentElement;
-    const containerText = normalizeText(container ? container.innerText : anchor.textContent);
-
-    if (!PRICE_TEXT_REGEX.test(containerText)) {
+    const listing = parseListingFromContainer(anchor, container);
+    if (!listing) {
       return;
     }
 
-    const imageElement = container ? container.querySelector('img') : null;
-    const title = normalizeText(anchor.textContent).slice(0, 200) || null;
-    const addressElement = container
-      ? container.querySelector('[data-testid*="address"], [class*="address"], address')
-      : null;
-    const address = normalizeText(addressElement ? addressElement.textContent : '').slice(0, 240) || null;
-
-    const listing = {
-      listingUrl,
-      title,
-      address,
-      city: null,
-      state: null,
-      zip: null,
-      imageUrl: imageElement ? imageElement.src : null,
-      rentPrice: parsePriceOrNull(containerText),
-      bedrooms: parseFloatOrNull(containerText.match(BEDROOMS_REGEX)),
-      bathrooms: parseFloatOrNull(containerText.match(BATHROOMS_REGEX)),
-      rawSnippet: containerText.slice(0, 700),
-      rawPayload: {
-        scannedFrom: window.location.href
-      }
-    };
-
-    deduped.set(listingUrl, listing);
+    deduped.set(listing.listingUrl, listing);
   });
 
   return [...deduped.values()];
 }
 
+function scrapeForRentListingsFromPage() {
+  const deduped = new Map();
+  const cards = document.querySelectorAll('[data-testid="property-card"], .property-card, article, li');
+
+  cards.forEach((card) => {
+    const anchor = card.querySelector('a[href]');
+    if (!anchor) {
+      return;
+    }
+
+    const listing = parseListingFromContainer(anchor, card);
+    if (!listing) {
+      return;
+    }
+
+    deduped.set(listing.listingUrl, listing);
+  });
+
+  return [...deduped.values()];
+}
+
+function getSourceFromHostname() {
+  const hostname = window.location.hostname.toLowerCase();
+  if (hostname.includes('trulia.com')) {
+    return 'trulia';
+  }
+  if (hostname.includes('forrent.com')) {
+    return 'forrent';
+  }
+  return null;
+}
+
 browser.runtime.onMessage.addListener((message) => {
-  if (!message || message.type !== 'SCAN_TRULIA_PAGE') {
+  if (!message || (message.type !== 'SCAN_TRULIA_PAGE' && message.type !== 'SCAN_RENTAL_PAGE')) {
     return undefined;
   }
 
-  const listings = scrapeListingsFromPage();
+  const source = getSourceFromHostname();
+  if (!source) {
+    return Promise.resolve({
+      source: null,
+      listings: [],
+      count: 0
+    });
+  }
+
+  const listings = source === 'forrent' ? scrapeForRentListingsFromPage() : scrapeTruliaListingsFromPage();
   return Promise.resolve({
+    source,
     listings,
     count: listings.length
   });

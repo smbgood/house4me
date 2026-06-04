@@ -1,8 +1,9 @@
-# House4Me Trulia Scanner (Firefox)
+# House4Me Rental Scanner (Firefox)
 
-This extension scans the current Trulia page and sends listing data to:
+This extension scans the current Trulia or ForRent page and sends listing data to:
 
-`/.netlify/functions/ingest-trulia-listings`
+- `/.netlify/functions/ingest-trulia-listings`
+- `/.netlify/functions/ingest-forrent-listings`
 
 ## Load Extension Locally
 
@@ -13,12 +14,14 @@ This extension scans the current Trulia page and sends listing data to:
 ## Configure
 
 1. Open extension options.
-2. Set:
-   - **Ingest URL**: e.g. `http://localhost:9999/.netlify/functions/ingest-trulia-listings`
-   - **Ingest Token**: value matching Netlify env var `TRULIA_INGEST_TOKEN`
+2. Set all source-specific settings:
+   - **Trulia Ingest URL**: e.g. `http://localhost:9999/.netlify/functions/ingest-trulia-listings`
+   - **Trulia Ingest Token**: value matching Netlify env var `TRULIA_INGEST_TOKEN`
+   - **ForRent Ingest URL**: e.g. `http://localhost:9999/.netlify/functions/ingest-forrent-listings`
+   - **ForRent Ingest Token**: value matching Netlify env var `FORRENT_INGEST_TOKEN`
 
 ## Use
 
-1. Navigate to a Trulia search results page.
+1. Navigate to a Trulia or ForRent search results page.
 2. Open the extension popup.
 3. Click **Scan current page**.

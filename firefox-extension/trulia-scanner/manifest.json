@@ -1,16 +1,17 @@
 {
   "manifest_version": 3,
-  "name": "House4Me Trulia Scanner",
+  "name": "House4Me Rental Scanner",
   "version": "1.0.0",
-  "description": "Scan the current Trulia page and send listings to House4Me ingest.",
+  "description": "Scan Trulia or ForRent pages and send listings to House4Me ingest.",
   "permissions": ["activeTab", "storage", "tabs"],
   "host_permissions": [
     "*://*.trulia.com/*",
+    "*://*.forrent.com/*",
     "http://localhost:9999/*",
     "https://*.netlify.app/*"
   ],
   "action": {
-    "default_title": "Trulia Scanner",
+    "default_title": "Rental Scanner",
     "default_popup": "popup.html"
   },
   "options_ui": {
@@ -19,7 +20,7 @@
   },
   "content_scripts": [
     {
-      "matches": ["*://*.trulia.com/*"],
+      "matches": ["*://*.trulia.com/*", "*://*.forrent.com/*"],
       "js": ["content-script.js"],
       "run_at": "document_idle"
     }

@@ -9,10 +9,29 @@ function setStatus(message) {
 }
 
 async function getSettings() {
-  const values = await browser.storage.local.get(['ingestUrl', 'ingestToken']);
+  const values = await browser.storage.local.get([
+    'ingestUrl',
+    'ingestToken',
+    'truliaIngestUrl',
+    'truliaIngestToken',
+    'forrentIngestUrl',
+    'forrentIngestToken'
+  ]);
   return {
-    ingestUrl: typeof values.ingestUrl === 'string' ? values.ingestUrl.trim() : '',
-    ingestToken: typeof values.ingestToken === 'string' ? values.ingestToken.trim() : ''
+    truliaIngestUrl:
+      typeof values.truliaIngestUrl === 'string'
+        ? values.truliaIngestUrl.trim()
+        : typeof values.ingestUrl === 'string'
+          ? values.ingestUrl.trim()
+          : '',
+    truliaIngestToken:
+      typeof values.truliaIngestToken === 'string'
+        ? values.truliaIngestToken.trim()
+        : typeof values.ingestToken === 'string'
+          ? values.ingestToken.trim()
+          : '',
+    forrentIngestUrl: typeof values.forrentIngestUrl === 'string' ? values.forrentIngestUrl.trim() : '',
+    forrentIngestToken: typeof values.forrentIngestToken === 'string' ? values.forrentIngestToken.trim() : ''
   };
 }
 
@@ -23,26 +42,35 @@ async function getActiveTab() {
 
 async function scanCurrentPage() {
   const settings = await getSettings();
-  if (!settings.ingestUrl || !settings.ingestToken) {
-    setStatus('Missing ingest URL/token. Open options and configure them first.');
-    return;
-  }
-
   const tab = await getActiveTab();
   if (!tab || !tab.id || !tab.url) {
     setStatus('Unable to determine active tab.');
     return;
   }
 
-  if (!tab.url.includes('trulia.com')) {
-    setStatus('Active tab is not a Trulia page.');
+  let source = null;
+  if (tab.url.includes('trulia.com')) {
+    source = 'trulia';
+  } else if (tab.url.includes('forrent.com')) {
+    source = 'forrent';
+  }
+
+  if (!source) {
+    setStatus('Active tab must be on Trulia or ForRent.');
     return;
   }
 
-  setStatus('Scanning page...');
+  const ingestUrl = source === 'trulia' ? settings.truliaIngestUrl : settings.forrentIngestUrl;
+  const ingestToken = source === 'trulia' ? settings.truliaIngestToken : settings.forrentIngestToken;
+  if (!ingestUrl || !ingestToken) {
+    setStatus(`Missing ${source} ingest URL/token. Open options and configure them first.`);
+    return;
+  }
+
+  setStatus(`Scanning ${source} page...`);
   let scanResult;
   try {
-    scanResult = await browser.tabs.sendMessage(tab.id, { type: 'SCAN_TRULIA_PAGE' });
+    scanResult = await browser.tabs.sendMessage(tab.id, { type: 'SCAN_RENTAL_PAGE' });
   } catch (error) {
     setStatus(`Failed to scan page: ${String(error)}`);
     return;
@@ -58,13 +86,17 @@ async function scanCurrentPage() {
     return;
   }
 
-  setStatus(`Found ${scanResult.listings.length} listings. Sending...`);
+  if (scanResult.source && scanResult.source !== source) {
+    source = scanResult.source;
+  }
+
+  setStatus(`Found ${scanResult.listings.length} ${source} listings. Sending...`);
   try {
-    const response = await fetch(settings.ingestUrl, {
+    const response = await fetch(ingestUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${settings.ingestToken}`
+        Authorization: `Bearer ${ingestToken}`
       },
       body: JSON.stringify({ listings: scanResult.listings })
     });

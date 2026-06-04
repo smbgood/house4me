@@ -3,24 +3,36 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Trulia Scanner Options</title>
+    <title>Rental Scanner Options</title>
     <link rel="stylesheet" href="options.css" />
   </head>
   <body>
     <main>
-      <h1>House4Me Trulia Scanner Settings</h1>
+      <h1>House4Me Rental Scanner Settings</h1>
       <form id="settingsForm">
-        <label for="ingestUrl">Ingest URL</label>
+        <label for="truliaIngestUrl">Trulia Ingest URL</label>
         <input
-          id="ingestUrl"
-          name="ingestUrl"
+          id="truliaIngestUrl"
+          name="truliaIngestUrl"
           type="url"
           required
           placeholder="https://your-site.netlify.app/.netlify/functions/ingest-trulia-listings"
         />
 
-        <label for="ingestToken">Ingest Token</label>
-        <input id="ingestToken" name="ingestToken" type="password" required />
+        <label for="truliaIngestToken">Trulia Ingest Token</label>
+        <input id="truliaIngestToken" name="truliaIngestToken" type="password" required />
+
+        <label for="forrentIngestUrl">ForRent Ingest URL</label>
+        <input
+          id="forrentIngestUrl"
+          name="forrentIngestUrl"
+          type="url"
+          required
+          placeholder="https://your-site.netlify.app/.netlify/functions/ingest-forrent-listings"
+        />
+
+        <label for="forrentIngestToken">ForRent Ingest Token</label>
+        <input id="forrentIngestToken" name="forrentIngestToken" type="password" required />
 
         <button type="submit">Save settings</button>
       </form>
