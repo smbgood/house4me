@@ -54,17 +54,6 @@
     </div>
   </section>
 
-  <section class="sync-status" *ngIf="syncStatus.length > 0">
-    <h2>Latest Sync Status</h2>
-    <div class="sync-grid">
-      <article *ngFor="let sync of syncStatus">
-        <h3>{{ sync.source | titlecase }}</h3>
-        <p>Status: <strong>{{ sync.status }}</strong></p>
-        <p>Found: {{ sync.listings_found }} | Upserted: {{ sync.listings_upserted }}</p>
-      </article>
-    </div>
-  </section>
-
   <section *ngIf="loading" class="state">Loading listings...</section>
   <section *ngIf="error" class="state error">{{ error }}</section>
 

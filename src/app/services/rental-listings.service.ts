@@ -33,14 +33,6 @@ export interface ListingFilters {
 
 export interface ListingsResponse {
   listings: RentalListing[];
-  syncStatus: Array<{
-    source: string;
-    status: string;
-    completed_at: string | null;
-    listings_found: number;
-    listings_upserted: number;
-    error_summary: string | null;
-  }>;
 }
 
 @Injectable({

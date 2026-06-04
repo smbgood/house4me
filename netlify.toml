@@ -17,6 +17,3 @@
 
 [functions]
   node_bundler = "esbuild"
-
-[functions.sync-listings]
-  schedule = "*/5 * * * *"

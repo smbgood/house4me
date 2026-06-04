@@ -20,7 +20,6 @@ type SelectBool = '' | 'true' | 'false';
 })
 export class ListingsPageComponent implements OnInit {
   listings: RentalListing[] = [];
-  syncStatus: ListingsResponse['syncStatus'] = [];
   loading = false;
   error = '';
 
@@ -68,8 +67,7 @@ export class ListingsPageComponent implements OnInit {
         q: this.query.trim() || undefined
       };
       const response = await this.rentalListingsService.getListings(filters);
-      this.listings = response.listings;
-      this.syncStatus = response.syncStatus;
+      this.listings = response.listings;      
     } catch (error) {
       this.error = error instanceof Error ? error.message : 'Failed to load listings.';
     } finally {
