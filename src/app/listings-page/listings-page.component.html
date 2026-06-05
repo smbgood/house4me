@@ -86,7 +86,6 @@
         <div class="listing-top">
           <div class="listing-info">
             <a [href]="listing.listing_url" target="_blank" rel="noopener noreferrer"><h3>{{ listing.title || 'Untitled listing' }}</h3></a>
-            <p>{{ listing.address }}, {{ listing.city }}, {{ listing.state }} {{ listing.zip }}</p>
             <p class="rent">{{ listing.rent_price ? ('$' + listing.rent_price) : 'Price unavailable' }}</p>
             <p>
               Pets:
