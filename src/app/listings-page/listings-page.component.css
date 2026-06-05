@@ -145,14 +145,18 @@ button.ghost {
 }
 
 .reject-actions {
-  display: grid;
+  display: flex;
+  flex-wrap: wrap;
   gap: 0.35rem;
   width: 100%;
 }
 
 .reject-actions .cross-off {
-  width: 100%;
-  text-align: left;
+  flex: 1 1 calc(33.333% - 0.35rem);
+  min-width: 92px;
+  padding: 0.4rem 0.55rem;
+  font-size: 0.78rem;
+  text-align: center;
 }
 
 .reject-actions .cross-off.other {
