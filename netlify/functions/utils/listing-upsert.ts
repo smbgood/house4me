@@ -1,5 +1,5 @@
 import { type NormalizedListingInput } from './sources';
-import { buildListingHash } from './sources/normalize';
+import { buildAddressKey, buildListingHash } from './sources/normalize';
 import { supabaseAdmin } from './supabase';
 
 function toUpsertRow(listing: NormalizedListingInput, seenAtIso: string) {
@@ -9,6 +9,8 @@ function toUpsertRow(listing: NormalizedListingInput, seenAtIso: string) {
     source_property_id: listing.sourcePropertyId ?? null,
     listing_url: listing.listingUrl,
     listing_url_hash: buildListingHash(listing.listingUrl),
+    identity_url_hash: buildListingHash(listing.listingUrl),
+    address_key: buildAddressKey(listing.address, listing.city, listing.state, listing.zip),
     image_url: listing.imageUrl ?? null,
     title: listing.title ?? null,
     address: listing.address ?? null,
@@ -37,9 +39,14 @@ function toUpsertRow(listing: NormalizedListingInput, seenAtIso: string) {
   };
 }
 
+interface UpsertListingsOptions {
+  targetListId?: string | null;
+}
+
 export async function upsertListingsAndSnapshots(
   listings: NormalizedListingInput[],
-  seenAtIso = new Date().toISOString()
+  seenAtIso = new Date().toISOString(),
+  options: UpsertListingsOptions = {}
 ): Promise<number> {
   if (listings.length === 0) {
     return 0;
@@ -67,6 +74,19 @@ export async function upsertListingsAndSnapshots(
     const snapshotResult = await supabaseAdmin.from('rental_listing_snapshots').insert(snapshotRows);
     if (snapshotResult.error) {
       throw snapshotResult.error;
+    }
+
+    if (options.targetListId) {
+      const membershipRows = updatedRows.map((row) => ({
+        list_id: options.targetListId,
+        listing_id: row.id
+      }));
+      const membershipInsert = await supabaseAdmin
+        .from('rental_listing_list_memberships')
+        .upsert(membershipRows, { onConflict: 'list_id,listing_id', ignoreDuplicates: true });
+      if (membershipInsert.error) {
+        throw membershipInsert.error;
+      }
     }
   }
 

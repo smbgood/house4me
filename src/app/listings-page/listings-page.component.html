@@ -7,6 +7,26 @@
 
   <section class="filters">
     <label>
+      Import list
+      <select [(ngModel)]="selectedListSlug" [disabled]="loadingLists" (ngModelChange)="changeSelectedList()">
+        <option *ngFor="let list of listingLists" [value]="list.slug">
+          {{ list.name }}
+        </option>
+      </select>
+    </label>
+
+    <label class="list-create">
+      New list name
+      <input type="text" [(ngModel)]="newListName" maxlength="60" placeholder="e.g. Single Family Homes" />
+    </label>
+
+    <div class="list-actions">
+      <button type="button" [disabled]="creatingList || !newListName.trim()" (click)="createList()">
+        {{ creatingList ? 'Creating...' : 'Create list' }}
+      </button>
+    </div>
+
+    <label>
       Source
       <select [(ngModel)]="source">
         <option value="">All</option>
@@ -55,6 +75,8 @@
       <button type="button" class="ghost" (click)="clearFilters()">Clear</button>
     </div>
   </section>
+
+  <section *ngIf="listError" class="state error">{{ listError }}</section>
 
   <section *ngIf="loading" class="state">Loading listings...</section>
   <section *ngIf="error" class="state error">{{ error }}</section>

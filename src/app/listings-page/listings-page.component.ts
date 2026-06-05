@@ -6,6 +6,7 @@ import { RouterModule } from '@angular/router';
 import {
   type CrossOffReason,
   type ListingFilters,
+  type ListingList,
   type RentalListing,
   RentalListingsService
 } from '../services/rental-listings.service';
@@ -21,9 +22,15 @@ type CrossOffReasonOption = { value: CrossOffReason; label: string };
   styleUrl: './listings-page.component.css'
 })
 export class ListingsPageComponent implements OnInit {
+  listingLists: ListingList[] = [];
   listings: RentalListing[] = [];
   loading = false;
+  loadingLists = false;
+  creatingList = false;
   error = '';
+  listError = '';
+  newListName = '';
+  selectedListSlug = 'main';
   pendingCrossOffIds = new Set<string>();
   pendingLikeIds = new Set<string>();
   crossOffModalListingId: string | null = null;
@@ -50,6 +57,7 @@ export class ListingsPageComponent implements OnInit {
   constructor(private readonly rentalListingsService: RentalListingsService) {}
 
   async ngOnInit(): Promise<void> {
+    await this.loadListingLists();
     await this.load();
   }
 
@@ -65,6 +73,33 @@ export class ListingsPageComponent implements OnInit {
     this.maxRent = null;
     this.query = '';
     await this.load();
+  }
+
+  async changeSelectedList(): Promise<void> {
+    await this.load();
+  }
+
+  async createList(): Promise<void> {
+    const listName = this.newListName.trim();
+    if (!listName || this.creatingList) {
+      return;
+    }
+
+    this.creatingList = true;
+    this.listError = '';
+    try {
+      const response = await this.rentalListingsService.createListingList(listName);
+      this.newListName = '';
+      await this.loadListingLists();
+      if (response.list?.slug) {
+        this.selectedListSlug = response.list.slug;
+      }
+      await this.load();
+    } catch (error) {
+      this.listError = error instanceof Error ? error.message : 'Failed to create listing list.';
+    } finally {
+      this.creatingList = false;
+    }
   }
 
   trackById(_: number, item: RentalListing): string {
@@ -145,6 +180,7 @@ export class ListingsPageComponent implements OnInit {
     this.error = '';
     try {
       const filters: ListingFilters = {
+        list: this.selectedListSlug || 'main',
         source: this.source || undefined,
         pets: this.pets,
         fence: this.fence,
@@ -158,6 +194,25 @@ export class ListingsPageComponent implements OnInit {
       this.error = error instanceof Error ? error.message : 'Failed to load listings.';
     } finally {
       this.loading = false;
+    }
+  }
+
+  private async loadListingLists(): Promise<void> {
+    this.loadingLists = true;
+    this.listError = '';
+    try {
+      const response = await this.rentalListingsService.getListingLists();
+      const lists = response.lists ?? [];
+      this.listingLists = lists.length > 0 ? lists : [{ id: 'main', slug: 'main', name: 'Main' }];
+      if (!this.listingLists.some((list) => list.slug === this.selectedListSlug)) {
+        this.selectedListSlug = 'main';
+      }
+    } catch (error) {
+      this.listingLists = [{ id: 'main', slug: 'main', name: 'Main' }];
+      this.selectedListSlug = 'main';
+      this.listError = error instanceof Error ? error.message : 'Failed to load listing lists.';
+    } finally {
+      this.loadingLists = false;
     }
   }
 }

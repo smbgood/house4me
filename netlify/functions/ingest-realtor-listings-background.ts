@@ -13,6 +13,8 @@ import { supabaseAdmin } from './utils/supabase';
 interface BackgroundIngestBody {
   runId?: unknown;
   extensionListings?: unknown;
+  targetListId?: unknown;
+  targetListSlug?: unknown;
 }
 
 const LOG_PREFIX = '[ingest-realtor]';
@@ -80,11 +82,15 @@ export const handler: Handler = async (event) => {
 
   const runId = parsedBody.runId;
   const extensionListings = parsedBody.extensionListings as NormalizedListingInput[];
+  const targetListId = typeof parsedBody.targetListId === 'string' ? parsedBody.targetListId.trim() : '';
+  const targetListSlug = typeof parsedBody.targetListSlug === 'string' ? parsedBody.targetListSlug.trim() : '';
 
   console.log(`${LOG_PREFIX} Background run ${runId} started with ${extensionListings.length} listing payload(s).`);
 
   try {
-    const { accepted, upserted } = await processRealtorListingsSequential(extensionListings);
+    const { accepted, upserted } = await processRealtorListingsSequential(extensionListings, {
+      targetListId: targetListId || null
+    });
 
     const runUpdate = await supabaseAdmin
       .from('source_sync_runs')
@@ -104,7 +110,12 @@ export const handler: Handler = async (event) => {
     return {
       statusCode: 200,
       headers: defaultHeaders,
-      body: JSON.stringify({ runId, accepted, upserted })
+      body: JSON.stringify({
+        runId,
+        accepted,
+        upserted,
+        imported_to_list: targetListSlug || 'main'
+      })
     };
   } catch (error) {
     const errorMessage = formatIngestError(error);

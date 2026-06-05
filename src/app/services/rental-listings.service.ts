@@ -41,6 +41,7 @@ export interface RentalListing {
 }
 
 export interface ListingFilters {
+  list?: string;
   source?: string;
   pets?: 'true' | 'false' | '';
   fence?: 'true' | 'false' | '';
@@ -51,6 +52,7 @@ export interface ListingFilters {
 
 export interface ListingsResponse {
   listings: RentalListing[];
+  selectedList?: ListingList;
 }
 
 export interface ListingResponse {
@@ -84,6 +86,22 @@ export interface ListingLikeResponse {
   other_likers?: string[];
 }
 
+export interface ListingList {
+  id: string;
+  slug: string;
+  name: string;
+  is_system?: boolean;
+  created_at?: string;
+}
+
+export interface ListingListsResponse {
+  lists: ListingList[];
+}
+
+export interface CreateListingListResponse {
+  list: ListingList;
+}
+
 @Injectable({
   providedIn: 'root'
 })
@@ -95,6 +113,9 @@ export class RentalListingsService {
 
     if (filters.source) {
       params.set('source', filters.source);
+    }
+    if (filters.list) {
+      params.set('list', filters.list);
     }
     if (filters.pets) {
       params.set('pets', filters.pets);
@@ -196,5 +217,40 @@ export class RentalListingsService {
     }
 
     return (await response.json()) as ListingsResponse;
+  }
+
+  async getListingLists(): Promise<ListingListsResponse> {
+    const url = `${environment.apiUrl}/get-listing-lists`;
+    const refreshToken = this.googleAuthService.getRefreshToken();
+    const headers: HeadersInit = refreshToken
+      ? { Authorization: `Bearer ${refreshToken}` }
+      : {};
+
+    const response = await fetch(url, { headers });
+    if (!response.ok) {
+      throw new Error(`Failed to load listing lists (${response.status}).`);
+    }
+
+    return (await response.json()) as ListingListsResponse;
+  }
+
+  async createListingList(name: string): Promise<CreateListingListResponse> {
+    const url = `${environment.apiUrl}/create-listing-list`;
+    const refreshToken = this.googleAuthService.getRefreshToken();
+    const headers: HeadersInit = {
+      'Content-Type': 'application/json',
+      ...(refreshToken ? { Authorization: `Bearer ${refreshToken}` } : {})
+    };
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ name })
+    });
+    if (!response.ok) {
+      throw new Error(`Failed to create listing list (${response.status}).`);
+    }
+
+    return (await response.json()) as CreateListingListResponse;
   }
 }

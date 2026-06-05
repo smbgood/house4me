@@ -11,6 +11,20 @@
       <h1>Rental Scanner</h1>
       <p class="subtitle">Scan current Trulia, ForRent, Zillow, or Realtor.com page and ingest listings.</p>
 
+      <section class="list-controls">
+        <label for="listSelect">Import list</label>
+        <div class="list-row">
+          <select id="listSelect">
+            <option value="main">Main</option>
+          </select>
+          <button id="refreshListsButton" type="button" class="ghost compact">Refresh</button>
+        </div>
+        <div class="list-row">
+          <input id="newListNameInput" type="text" placeholder="Create new list" maxlength="60" />
+          <button id="createListButton" type="button" class="ghost compact">Create</button>
+        </div>
+      </section>
+
       <div class="actions">
         <button id="scanButton" type="button">Scan current page</button>
         <button id="optionsButton" type="button" class="ghost">Options</button>

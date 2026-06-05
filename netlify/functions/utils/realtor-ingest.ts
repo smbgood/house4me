@@ -18,6 +18,10 @@ export interface ProcessRealtorListingsResult {
   upserted: number;
 }
 
+interface ProcessRealtorListingsOptions {
+  targetListId?: string | null;
+}
+
 export function formatIngestError(error: unknown): string {
   if (error instanceof Error) {
     return error.message;
@@ -124,7 +128,8 @@ export function normalizeRealtorListings(listings: unknown[]): NormalizeRealtorL
 }
 
 export async function processRealtorListingsSequential(
-  extensionListings: NormalizedListingInput[]
+  extensionListings: NormalizedListingInput[],
+  options: ProcessRealtorListingsOptions = {}
 ): Promise<ProcessRealtorListingsResult> {
   const dedupedUrls = [...new Set(extensionListings.map((listing) => listing.listingUrl))];
   const extensionListingByUrl = new Map(extensionListings.map((listing) => [listing.listingUrl, listing]));
@@ -152,7 +157,9 @@ export async function processRealtorListingsSequential(
       continue;
     }
 
-    const upsertCount = await upsertListingsAndSnapshots([listing]);
+    const upsertCount = await upsertListingsAndSnapshots([listing], new Date().toISOString(), {
+      targetListId: options.targetListId ?? null
+    });
     upserted += upsertCount;
     accepted += 1;
 

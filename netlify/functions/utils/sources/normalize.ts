@@ -81,6 +81,28 @@ export function buildListingHash(url: string): string {
   return crypto.createHash('sha256').update(url).digest('hex');
 }
 
+function normalizeAddressPart(value: string | undefined): string {
+  return (value ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '');
+}
+
+export function buildAddressKey(address?: string, city?: string, state?: string, zip?: string): string | null {
+  const parts = [
+    normalizeAddressPart(address),
+    normalizeAddressPart(city),
+    normalizeAddressPart(state),
+    normalizeAddressPart(zip)
+  ].filter((part) => part.length > 0);
+
+  if (parts.length === 0) {
+    return null;
+  }
+
+  return parts.join('|');
+}
+
 export function toAbsoluteUrl(value: string | undefined, baseUrl: string): string | undefined {
   if (!value) {
     return undefined;

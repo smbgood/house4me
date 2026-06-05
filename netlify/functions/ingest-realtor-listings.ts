@@ -1,6 +1,7 @@
 import type { Handler } from '@netlify/functions';
 
 import { defaultHeaders, optionsResponse } from './utils/cors';
+import { MAIN_LIST_SLUG, resolveListingListByIdOrSlug } from './utils/listing-lists';
 import { formatIngestError, getBearerToken, logIngestError, normalizeRealtorListings } from './utils/realtor-ingest';
 import { supabaseAdmin } from './utils/supabase';
 
@@ -8,6 +9,8 @@ const LOG_PREFIX = '[ingest-realtor]';
 
 interface IngestBody {
   listings?: unknown;
+  listId?: unknown;
+  listSlug?: unknown;
 }
 
 function resolveSiteUrl(): string {
@@ -71,6 +74,26 @@ export const handler: Handler = async (event) => {
     };
   }
 
+  const listId = typeof parsedBody.listId === 'string' ? parsedBody.listId.trim() : '';
+  const listSlug = typeof parsedBody.listSlug === 'string' ? parsedBody.listSlug.trim().toLowerCase() : '';
+  let selectedList = null;
+  if (listId || listSlug) {
+    selectedList = await resolveListingListByIdOrSlug({
+      listId: listId || undefined,
+      listSlug: listSlug || undefined
+    });
+    if (!selectedList) {
+      return {
+        statusCode: 400,
+        headers: defaultHeaders,
+        body: JSON.stringify({ error: 'Invalid listId or listSlug.' })
+      };
+    }
+  }
+
+  const targetListId = selectedList && selectedList.slug !== MAIN_LIST_SLUG ? selectedList.id : null;
+  const targetListSlug = selectedList?.slug ?? MAIN_LIST_SLUG;
+
   const bodyBytes = event.body?.length ?? 0;
   console.log(
     `${LOG_PREFIX} Request received with ${parsedBody.listings.length} listings (${bodyBytes} byte body).`
@@ -99,7 +122,8 @@ export const handler: Handler = async (event) => {
         mode: 'manual-addon',
         submittedCount: parsedBody.listings.length,
         normalizedCount: normalizedFromExtension.length,
-        queuedCount: dedupedUrls.length
+        queuedCount: dedupedUrls.length,
+        targetListSlug
       }
     })
     .select('id')
@@ -129,7 +153,9 @@ export const handler: Handler = async (event) => {
   const backgroundUrl = `${resolveSiteUrl()}/.netlify/functions/ingest-realtor-listings-background`;
   const requestPayload = JSON.stringify({
     runId,
-    extensionListings: normalizedFromExtension
+    extensionListings: normalizedFromExtension,
+    targetListId,
+    targetListSlug
   });
 
   try {
@@ -180,7 +206,8 @@ export const handler: Handler = async (event) => {
         runId,
         received: parsedBody.listings.length,
         accepted: dedupedUrls.length,
-        rejected: parsedBody.listings.length - dedupedUrls.length
+        rejected: parsedBody.listings.length - dedupedUrls.length,
+        imported_to_list: targetListSlug
       })
     };
   } catch (error) {

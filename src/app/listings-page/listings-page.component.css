@@ -47,6 +47,15 @@
   grid-column: span 2;
 }
 
+.list-create {
+  grid-column: span 2;
+}
+
+.list-actions {
+  display: flex;
+  align-items: end;
+}
+
 .actions {
   display: flex;
   align-items: end;

@@ -2,6 +2,7 @@ import type { Handler } from '@netlify/functions';
 
 import { defaultHeaders, optionsResponse } from './utils/cors';
 import { upsertListingsAndSnapshots } from './utils/listing-upsert';
+import { MAIN_LIST_SLUG, resolveListingListByIdOrSlug } from './utils/listing-lists';
 import { inferFenceValue, inferPetsValue, parseNumber, parseRent, toAbsoluteUrl } from './utils/sources/normalize';
 import { type NormalizedListingInput } from './utils/sources/types';
 import { supabaseAdmin } from './utils/supabase';
@@ -10,6 +11,8 @@ const ZILLOW_BASE_URL = 'https://www.zillow.com';
 
 interface IngestBody {
   listings?: unknown;
+  listId?: unknown;
+  listSlug?: unknown;
 }
 
 function getBearerToken(headers: Record<string, string | undefined>): string | null {
@@ -129,6 +132,25 @@ export const handler: Handler = async (event) => {
     };
   }
 
+  const listId = typeof parsedBody.listId === 'string' ? parsedBody.listId.trim() : '';
+  const listSlug = typeof parsedBody.listSlug === 'string' ? parsedBody.listSlug.trim().toLowerCase() : '';
+  let selectedList = null;
+  if (listId || listSlug) {
+    selectedList = await resolveListingListByIdOrSlug({
+      listId: listId || undefined,
+      listSlug: listSlug || undefined
+    });
+    if (!selectedList) {
+      return {
+        statusCode: 400,
+        headers: defaultHeaders,
+        body: JSON.stringify({ error: 'Invalid listId or listSlug.' })
+      };
+    }
+  }
+
+  const targetListId = selectedList && selectedList.slug !== MAIN_LIST_SLUG ? selectedList.id : null;
+
   const startedAt = new Date().toISOString();
   const runInsert = await supabaseAdmin
     .from('source_sync_runs')
@@ -138,7 +160,8 @@ export const handler: Handler = async (event) => {
       started_at: startedAt,
       metadata: {
         mode: 'manual-addon',
-        submittedCount: parsedBody.listings.length
+        submittedCount: parsedBody.listings.length,
+        targetListSlug: selectedList?.slug ?? MAIN_LIST_SLUG
       }
     })
     .select('id')
@@ -156,7 +179,7 @@ export const handler: Handler = async (event) => {
 
   try {
     const acceptedListings = [...deduped.values()];
-    const upserted = await upsertListingsAndSnapshots(acceptedListings);
+    const upserted = await upsertListingsAndSnapshots(acceptedListings, startedAt, { targetListId });
 
     await supabaseAdmin
       .from('source_sync_runs')
@@ -176,7 +199,8 @@ export const handler: Handler = async (event) => {
         received: parsedBody.listings.length,
         accepted: acceptedListings.length,
         rejected: parsedBody.listings.length - acceptedListings.length,
-        upserted
+        upserted,
+        imported_to_list: selectedList?.slug ?? MAIN_LIST_SLUG
       })
     };
   } catch (error) {

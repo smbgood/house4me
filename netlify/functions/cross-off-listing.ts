@@ -132,6 +132,76 @@ export const handler: Handler = async (event) => {
   }
 
   const supabaseAdmin = getSupabaseAdmin();
+  const targetListingResult = await supabaseAdmin
+    .from('rental_listings')
+    .select('id, identity_url_hash, address_key')
+    .eq('id', id)
+    .maybeSingle();
+  if (targetListingResult.error) {
+    return {
+      statusCode: 500,
+      headers: defaultHeaders,
+      body: JSON.stringify({ error: targetListingResult.error.message })
+    };
+  }
+  if (!targetListingResult.data) {
+    return {
+      statusCode: 404,
+      headers: defaultHeaders,
+      body: JSON.stringify({ error: 'Listing not found.' })
+    };
+  }
+
+  const matchingListingIds = new Set<string>([id]);
+  if (
+    typeof targetListingResult.data.identity_url_hash === 'string' &&
+    targetListingResult.data.identity_url_hash.length > 0
+  ) {
+    const sameIdentityResult = await supabaseAdmin
+      .from('rental_listings')
+      .select('id')
+      .eq('identity_url_hash', targetListingResult.data.identity_url_hash);
+    if (sameIdentityResult.error) {
+      return {
+        statusCode: 500,
+        headers: defaultHeaders,
+        body: JSON.stringify({ error: sameIdentityResult.error.message })
+      };
+    }
+    for (const row of sameIdentityResult.data ?? []) {
+      if (typeof row.id === 'string' && row.id.length > 0) {
+        matchingListingIds.add(row.id);
+      }
+    }
+  }
+  if (typeof targetListingResult.data.address_key === 'string' && targetListingResult.data.address_key.length > 0) {
+    const sameAddressResult = await supabaseAdmin
+      .from('rental_listings')
+      .select('id')
+      .eq('address_key', targetListingResult.data.address_key);
+    if (sameAddressResult.error) {
+      return {
+        statusCode: 500,
+        headers: defaultHeaders,
+        body: JSON.stringify({ error: sameAddressResult.error.message })
+      };
+    }
+    for (const row of sameAddressResult.data ?? []) {
+      if (typeof row.id === 'string' && row.id.length > 0) {
+        matchingListingIds.add(row.id);
+      }
+    }
+  }
+
+  const listingIdsToUpdate = [...matchingListingIds];
+  if (listingIdsToUpdate.length === 0) {
+    return {
+      statusCode: 404,
+      headers: defaultHeaders,
+      body: JSON.stringify({ error: 'Listing not found.' })
+    };
+  }
+
   const updatePayload = isCrossedOff
     ? {
         is_crossed_off: true,
@@ -148,9 +218,9 @@ export const handler: Handler = async (event) => {
   const updateResult = await supabaseAdmin
     .from('rental_listings')
     .update(updatePayload)
-    .eq('id', id)
+    .in('id', listingIdsToUpdate)
     .select('id, is_crossed_off, cross_off_reason, crossed_off_by, crossed_off_at')
-    .maybeSingle();
+    .limit(1000);
 
   if (updateResult.error) {
     return {
@@ -160,19 +230,24 @@ export const handler: Handler = async (event) => {
     };
   }
 
-  if (!updateResult.data) {
+  const updatedRows = updateResult.data ?? [];
+  if (updatedRows.length === 0) {
     return {
       statusCode: 404,
       headers: defaultHeaders,
       body: JSON.stringify({ error: 'Listing not found.' })
     };
   }
+  const targetUpdatedRow =
+    updatedRows.find((row) => row.id === id) ??
+    updatedRows[0];
 
   return {
     statusCode: 200,
     headers: defaultHeaders,
     body: JSON.stringify({
-      listing: updateResult.data
+      listing: targetUpdatedRow,
+      affected_count: updatedRows.length
     })
   };
 };
