@@ -3,6 +3,7 @@
 const statusEl = document.getElementById('status');
 const scanButton = document.getElementById('scanButton');
 const optionsButton = document.getElementById('optionsButton');
+let currentSource = null;
 
 function setStatus(message) {
   statusEl.textContent = message;
@@ -57,6 +58,7 @@ async function scanCurrentPage() {
     setStatus('Active tab must be on Trulia, ForRent, Zillow, or Realtor.com.');
     return;
   }
+  currentSource = source;
 
   const ingestToken =
     source === 'trulia'
@@ -71,7 +73,7 @@ async function scanCurrentPage() {
     return;
   }
 
-  setStatus(`Scanning ${source} page...`);
+  setStatus(source === 'forrent' ? 'Scanning ForRent page and enriching detail pages...' : `Scanning ${source} page...`);
   let scanResult;
   try {
     scanResult = await browser.tabs.sendMessage(tab.id, { type: 'SCAN_RENTAL_PAGE' });
@@ -124,17 +126,36 @@ Rejected: ${payload.rejected ?? '?'}`
       return;
     }
 
+    const enrichmentSummary =
+      source === 'forrent' && scanResult.enrichment
+        ? `
+Enriched: ${scanResult.enrichment.succeeded ?? '?'} / ${scanResult.enrichment.attempted ?? '?'}
+Enrich Failed: ${scanResult.enrichment.failed ?? '?'}`
+        : '';
     setStatus(
       `Ingest complete.
 Received: ${payload.received ?? '?'}
 Accepted: ${payload.accepted ?? '?'}
 Upserted: ${payload.upserted ?? '?'}
-Rejected: ${payload.rejected ?? '?'}`
+Rejected: ${payload.rejected ?? '?'}${enrichmentSummary}`
     );
   } catch (error) {
     setStatus(`Request failed: ${String(error)}`);
   }
 }
+
+browser.runtime.onMessage.addListener((message) => {
+  if (!message || message.type !== 'FORRENT_ENRICH_PROGRESS') {
+    return;
+  }
+  if (currentSource !== 'forrent') {
+    return;
+  }
+  const completed = Number.isFinite(message.completed) ? message.completed : 0;
+  const total = Number.isFinite(message.total) ? message.total : 0;
+  setStatus(`Scanning ForRent page and enriching detail pages...
+Progress: ${completed}/${total}`);
+});
 
 scanButton.addEventListener('click', () => {
   void scanCurrentPage();
