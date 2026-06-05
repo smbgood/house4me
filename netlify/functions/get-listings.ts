@@ -149,7 +149,7 @@ export const handler: Handler = async (event) => {
   let query = supabaseAdmin
     .from('rental_listings')
     .select(
-      'id, source, listing_url, image_url, title, address, city, state, zip, rent_price, bedrooms, bathrooms, allows_pets, has_fence, available_date, sqft, management_company, landlord_name, photo_count, identity_url_hash, address_key, is_crossed_off, status, last_seen_at'
+      'id, source, sources, listing_url, image_url, title, address, city, state, zip, rent_price, bedrooms, bathrooms, allows_pets, has_fence, available_date, sqft, management_company, landlord_name, photo_count, identity_url_hash, address_key, is_crossed_off, status, last_seen_at'
     )
     .eq('status', 'active')
     .eq('is_crossed_off', false)
@@ -157,7 +157,7 @@ export const handler: Handler = async (event) => {
     .limit(250);
 
   if (source) {
-    query = query.eq('source', source);
+    query = query.contains('sources', [source]);
   }
   if (pets !== undefined) {
     query = query.eq('allows_pets', pets);

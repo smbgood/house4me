@@ -122,7 +122,7 @@
         >
           {{ pendingCrossOffIds.has(listing.id) ? 'Crossing off...' : 'Cross off' }}
         </button>
-        <span class="source">{{ listing.source | titlecase }}</span>
+        <span class="source">{{ formatListingSources(listing) }}</span>
       </div>
     </article>
 

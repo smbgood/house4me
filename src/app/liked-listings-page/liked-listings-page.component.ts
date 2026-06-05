@@ -27,6 +27,15 @@ export class LikedListingsPageComponent implements OnInit {
     return item.id;
   }
 
+  formatListingSources(listing: RentalListing): string {
+    const sourceValues =
+      Array.isArray(listing.sources) && listing.sources.length > 0 ? listing.sources : [listing.source];
+    return sourceValues
+      .filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+      .map((value) => this.toSourceLabel(value))
+      .join(', ');
+  }
+
   async toggleLikeListing(id: string): Promise<void> {
     if (this.pendingLikeIds.has(id)) {
       return;
@@ -55,5 +64,16 @@ export class LikedListingsPageComponent implements OnInit {
     } finally {
       this.loading = false;
     }
+  }
+
+  private toSourceLabel(source: string): string {
+    const normalized = source.trim().toLowerCase();
+    if (normalized === 'realtor') {
+      return 'Realtor.com';
+    }
+    if (normalized === 'forrent') {
+      return 'ForRent';
+    }
+    return normalized.replace(/\b\w/g, (char) => char.toUpperCase());
   }
 }

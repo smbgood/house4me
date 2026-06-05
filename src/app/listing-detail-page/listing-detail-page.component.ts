@@ -187,6 +187,15 @@ export class ListingDetailPageComponent implements OnInit {
     return asDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   }
 
+  formatListingSources(listing: RentalListing): string {
+    const sourceValues =
+      Array.isArray(listing.sources) && listing.sources.length > 0 ? listing.sources : [listing.source];
+    return sourceValues
+      .filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+      .map((value) => this.toSourceLabel(value))
+      .join(', ');
+  }
+
   parseListingDetails(value: unknown): Array<{ category: string; parent_category: string; text: string[] }> {
     if (!Array.isArray(value)) {
       return [];
@@ -219,6 +228,17 @@ export class ListingDetailPageComponent implements OnInit {
     return Object.entries(value as Record<string, unknown>)
       .map(([key, fieldValue]) => `${key.replace(/_/g, ' ')}: ${String(fieldValue)}`)
       .filter((entry) => entry.trim().length > 0);
+  }
+
+  private toSourceLabel(source: string): string {
+    const normalized = source.trim().toLowerCase();
+    if (normalized === 'realtor') {
+      return 'Realtor.com';
+    }
+    if (normalized === 'forrent') {
+      return 'ForRent';
+    }
+    return normalized.replace(/\b\w/g, (char) => char.toUpperCase());
   }
 
   closeCoLikeModal(): void {

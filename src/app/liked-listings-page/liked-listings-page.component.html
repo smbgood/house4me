@@ -18,7 +18,7 @@
         <p class="rent">{{ listing.rent_price ? ('$' + listing.rent_price) : 'Price unavailable' }}</p>
       </div>
       <div class="listing-side">
-        <span class="source">{{ listing.source | titlecase }}</span>
+        <span class="source">{{ formatListingSources(listing) }}</span>
         <a [href]="listing.listing_url" target="_blank" rel="noopener noreferrer">Open listing</a>
         <button type="button" class="unlike" [disabled]="pendingLikeIds.has(listing.id)" (click)="toggleLikeListing(listing.id)">
           {{ pendingLikeIds.has(listing.id) ? 'Removing...' : 'Remove like' }}

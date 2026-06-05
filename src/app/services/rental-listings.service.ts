@@ -6,6 +6,7 @@ import { GoogleAuthService } from './google-auth.service';
 export interface RentalListing {
   id: string;
   source: string;
+  sources?: string[] | null;
   source_listing_id?: string | null;
   source_property_id?: string | null;
   listing_url: string;

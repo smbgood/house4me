@@ -121,7 +121,7 @@ export const handler: Handler = async (event) => {
   const listingResult = await supabaseAdmin
     .from('rental_listings')
     .select(
-      'id, source, source_listing_id, source_property_id, listing_url, image_url, title, address, city, state, zip, rent_price, bedrooms, bathrooms, allows_pets, has_fence, available_date, sqft, description_text, management_company, landlord_name, photo_count, tags, listing_details, fees, popularity, raw_snippet, raw_payload, is_crossed_off, status, last_seen_at, created_at, updated_at'
+      'id, source, sources, source_listing_id, source_property_id, listing_url, image_url, title, address, city, state, zip, rent_price, bedrooms, bathrooms, allows_pets, has_fence, available_date, sqft, description_text, management_company, landlord_name, photo_count, tags, listing_details, fees, popularity, raw_snippet, raw_payload, is_crossed_off, status, last_seen_at, created_at, updated_at'
     )
     .eq('id', listingId)
     .maybeSingle();

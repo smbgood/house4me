@@ -9,7 +9,7 @@
     <header class="detail-header">
       <h1>{{ listing.title || 'Untitled listing' }}</h1>
       <div class="header-actions">
-        <span class="source">{{ listing.source | titlecase }}</span>
+        <span class="source">{{ formatListingSources(listing) }}</span>
         <button type="button" class="like-toggle" [disabled]="pendingLike" (click)="toggleLike()">
           {{ pendingLike ? 'Saving...' : (listing.is_liked ? 'Unlike listing' : 'Like listing') }}
         </button>
