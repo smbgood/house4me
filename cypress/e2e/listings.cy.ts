@@ -217,7 +217,7 @@ describe('Rental aggregator listing filters', () => {
       cy.contains('button', 'Cross off').click();
     });
     cy.contains('h2', 'Why are you crossing off this listing?').should('be.visible');
-    cy.get('.modal-card select').select('Did Not Match Requirements');
+    cy.get('.modal-card select').should('have.value', 'did_not_match_requirements');
     cy.contains('.modal-card button', 'Confirm cross off').click();
     cy.wait('@crossOffListing');
     cy.contains('Blue Ranch').should('not.exist');

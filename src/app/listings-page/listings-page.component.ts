@@ -71,7 +71,7 @@ export class ListingsPageComponent implements OnInit {
       return;
     }
     this.crossOffModalListingId = id;
-    this.selectedCrossOffReason = '';
+    this.selectedCrossOffReason = this.crossOffReasonOptions[0].value;
     this.crossOffModalError = '';
   }
 

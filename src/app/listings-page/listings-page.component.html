@@ -62,10 +62,13 @@
   <section *ngIf="!loading && !error" class="listings">
     <article class="listing" *ngFor="let listing of listings; trackBy: trackById">
       <div class="listing-main">
-        <h3>
-          <a [routerLink]="['/listings', listing.id]">{{ listing.title || 'Untitled listing' }}</a>
-        </h3>
-        <p>{{ listing.address }}, {{ listing.city }}, {{ listing.state }} {{ listing.zip }}</p>
+        <h3>{{ listing.title || 'Untitled listing' }}</h3>
+        <p>
+          {{ listing.address }},
+          <a [href]="listing.listing_url" target="_blank" rel="noopener noreferrer">
+            {{ listing.city }}, {{ listing.state }} {{ listing.zip }}
+          </a>
+        </p>
         <p class="rent">{{ listing.rent_price ? ('$' + listing.rent_price) : 'Price unavailable' }}</p>
         <p>
           Pets:
@@ -78,7 +81,7 @@
       </div>
       <div class="listing-side">
         <span class="source">{{ listing.source | titlecase }}</span>
-        <a [href]="listing.listing_url" target="_blank" rel="noopener noreferrer">Open listing</a>
+        <a [routerLink]="['/listings', listing.id]" class="details-btn">Details</a>
         <button
           type="button"
           class="like-toggle"
@@ -111,7 +114,6 @@
       <label>
         Reason
         <select [(ngModel)]="selectedCrossOffReason">
-          <option value="">Select a reason</option>
           <option *ngFor="let option of crossOffReasonOptions" [value]="option.value">
             {{ option.label }}
           </option>

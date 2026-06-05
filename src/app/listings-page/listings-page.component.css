@@ -103,12 +103,12 @@ button.ghost {
   margin: 0 0 0.35rem;
 }
 
-.listing-main h3 a {
-  color: inherit;
+.listing-main p a {
+  color: #2563eb;
   text-decoration: none;
 }
 
-.listing-main h3 a:hover {
+.listing-main p a:hover {
   text-decoration: underline;
 }
 
@@ -118,6 +118,17 @@ button.ghost {
   align-items: end;
   gap: 0.4rem;
   min-width: 130px;
+}
+
+.listing-side .details-btn {
+  display: inline-block;
+  text-align: center;
+  text-decoration: none;
+  border: 0;
+  border-radius: 6px;
+  padding: 0.55rem 0.85rem;
+  background: #2563eb;
+  color: #fff;
 }
 
 .listing-side .cross-off {
