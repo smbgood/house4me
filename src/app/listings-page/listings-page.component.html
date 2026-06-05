@@ -139,4 +139,18 @@
       </div>
     </div>
   </section>
+
+  <section *ngIf="coLikeModalEmails" class="modal-backdrop" (click)="closeCoLikeModal()">
+    <div class="modal-card" role="dialog" aria-modal="true" (click)="$event.stopPropagation()">
+      <h2>This listing is already liked by others</h2>
+      <p>The following users have already liked this listing:</p>
+      <ul>
+        <li *ngFor="let email of coLikeModalEmails">{{ email }}</li>
+      </ul>
+
+      <div class="modal-actions">
+        <button type="button" class="ghost" (click)="closeCoLikeModal()">Dismiss</button>
+      </div>
+    </div>
+  </section>
 </main>

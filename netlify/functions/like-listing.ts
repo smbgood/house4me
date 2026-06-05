@@ -99,8 +99,30 @@ export const handler: Handler = async (event) => {
 
   const isLiked = typeof parsedBody.isLiked === 'boolean' ? parsedBody.isLiked : true;
   const supabaseAdmin = getSupabaseAdmin();
+  let otherLikers: string[] = [];
 
   if (isLiked) {
+    const otherLikersResult = await supabaseAdmin
+      .from('user_liked_listings')
+      .select('google_email')
+      .eq('listing_id', id)
+      .neq('google_email', googleEmail);
+    if (otherLikersResult.error) {
+      return {
+        statusCode: 500,
+        headers: defaultHeaders,
+        body: JSON.stringify({ error: otherLikersResult.error.message })
+      };
+    }
+
+    otherLikers = Array.from(
+      new Set(
+        (otherLikersResult.data ?? [])
+          .map((row) => (typeof row.google_email === 'string' ? row.google_email.trim().toLowerCase() : ''))
+          .filter((email) => email.length > 0)
+      )
+    );
+
     const insertResult = await supabaseAdmin.from('user_liked_listings').upsert(
       {
         google_email: googleEmail,
@@ -140,7 +162,8 @@ export const handler: Handler = async (event) => {
       listing: {
         id,
         is_liked: isLiked
-      }
+      },
+      other_likers: otherLikers
     })
   };
 };

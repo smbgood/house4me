@@ -27,6 +27,7 @@ export class ListingsPageComponent implements OnInit {
   pendingCrossOffIds = new Set<string>();
   pendingLikeIds = new Set<string>();
   crossOffModalListingId: string | null = null;
+  coLikeModalEmails: string[] | null = null;
   selectedCrossOffReason: CrossOffReason | '' = '';
   crossOffModalError = '';
   readonly crossOffReasonOptions: CrossOffReasonOption[] = [
@@ -85,6 +86,10 @@ export class ListingsPageComponent implements OnInit {
     this.crossOffModalError = '';
   }
 
+  closeCoLikeModal(): void {
+    this.coLikeModalEmails = null;
+  }
+
   async confirmCrossOffListing(): Promise<void> {
     const id = this.crossOffModalListingId;
     if (!id || this.pendingCrossOffIds.has(id)) {
@@ -118,9 +123,16 @@ export class ListingsPageComponent implements OnInit {
     this.error = '';
     try {
       const response = await this.rentalListingsService.likeListing(id, !isLiked);
-      this.listings = this.listings.map((listing) =>
-        listing.id === id ? { ...listing, is_liked: response.listing.is_liked } : listing
-      );
+      if (response.listing.is_liked) {
+        this.listings = this.listings.filter((listing) => listing.id !== id);
+        if ((response.other_likers?.length ?? 0) > 0) {
+          this.coLikeModalEmails = response.other_likers ?? null;
+        }
+      } else {
+        this.listings = this.listings.map((listing) =>
+          listing.id === id ? { ...listing, is_liked: response.listing.is_liked } : listing
+        );
+      }
     } catch (error) {
       this.error = error instanceof Error ? error.message : 'Failed to update listing like.';
     } finally {

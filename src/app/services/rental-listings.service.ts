@@ -81,6 +81,7 @@ export interface ListingLikeResponse {
     id: string;
     is_liked: boolean;
   };
+  other_likers?: string[];
 }
 
 @Injectable({

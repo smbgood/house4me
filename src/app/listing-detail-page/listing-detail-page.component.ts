@@ -16,6 +16,7 @@ export class ListingDetailPageComponent implements OnInit {
   loading = false;
   error = '';
   pendingLike = false;
+  coLikeModalEmails: string[] | null = null;
 
   constructor(
     private readonly route: ActivatedRoute,
@@ -75,6 +76,10 @@ export class ListingDetailPageComponent implements OnInit {
       .filter((entry) => entry.trim().length > 0);
   }
 
+  closeCoLikeModal(): void {
+    this.coLikeModalEmails = null;
+  }
+
   async toggleLike(): Promise<void> {
     if (!this.listing || this.pendingLike) {
       return;
@@ -88,6 +93,9 @@ export class ListingDetailPageComponent implements OnInit {
         ...this.listing,
         is_liked: response.listing.is_liked
       };
+      if (response.listing.is_liked && (response.other_likers?.length ?? 0) > 0) {
+        this.coLikeModalEmails = response.other_likers ?? null;
+      }
     } catch (error) {
       this.error = error instanceof Error ? error.message : 'Failed to update listing like.';
     } finally {

@@ -174,7 +174,9 @@ export const handler: Handler = async (event) => {
     }
   }
 
-  const listingsWithLikes = filteredListings.map((listing) => ({
+  const visibleListings = filteredListings.filter((listing) => !likedIds.has(listing.id));
+
+  const listingsWithLikes = visibleListings.map((listing) => ({
     ...listing,
     is_liked: likedIds.has(listing.id)
   }));

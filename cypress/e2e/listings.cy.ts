@@ -96,10 +96,14 @@ describe('Rental aggregator listing filters', () => {
   ];
 
   const crossedOffIds = new Set<string>();
+  const likedIds = new Set<string>();
 
   function filterListings(query: Record<string, string | number>): typeof listings {
     return listings.filter((listing) => {
       if (crossedOffIds.has(listing.id)) {
+        return false;
+      }
+      if (likedIds.has(listing.id)) {
         return false;
       }
       if (query['source'] && listing.source !== query['source']) {
@@ -128,13 +132,19 @@ describe('Rental aggregator listing filters', () => {
   }
 
   beforeEach(() => {
+    crossedOffIds.clear();
+    likedIds.clear();
+
     cy.intercept('GET', 'http://localhost:9999/.netlify/functions/verify-google-token', {
       statusCode: 200,
       body: { success: true, email: 'authorized@example.com' }
     }).as('verifyGoogleToken');
 
-    cy.intercept('GET', 'http://localhost:9999/.netlify/functions/get-listings*', (req) => {
-      expect(req.headers).to.have.property('authorization');
+    cy.intercept('http://localhost:9999/.netlify/functions/get-listings*', (req) => {
+      if (req.method === 'OPTIONS') {
+        req.reply({ statusCode: 200, body: {} });
+        return;
+      }
       req.reply({
         statusCode: 200,
         body: {
@@ -144,8 +154,11 @@ describe('Rental aggregator listing filters', () => {
       });
     }).as('getListings');
 
-    cy.intercept('POST', 'http://localhost:9999/.netlify/functions/cross-off-listing', (req) => {
-      expect(req.headers).to.have.property('authorization');
+    cy.intercept('http://localhost:9999/.netlify/functions/cross-off-listing', (req) => {
+      if (req.method === 'OPTIONS') {
+        req.reply({ statusCode: 200, body: {} });
+        return;
+      }
       const id = String((req.body as { id?: string })?.id ?? '');
       const crossOffReason = String((req.body as { crossOffReason?: string })?.crossOffReason ?? '');
       const listing = listings.find((item) => item.id === id);
@@ -169,8 +182,42 @@ describe('Rental aggregator listing filters', () => {
       });
     }).as('crossOffListing');
 
-    cy.intercept('GET', 'http://localhost:9999/.netlify/functions/get-listing*', (req) => {
-      expect(req.headers).to.have.property('authorization');
+    cy.intercept('http://localhost:9999/.netlify/functions/like-listing', (req) => {
+      if (req.method === 'OPTIONS') {
+        req.reply({ statusCode: 200, body: {} });
+        return;
+      }
+      const id = String((req.body as { id?: string })?.id ?? '');
+      const isLiked = Boolean((req.body as { isLiked?: boolean })?.isLiked);
+      const listing = listings.find((item) => item.id === id);
+      if (!listing) {
+        req.reply({ statusCode: 404, body: { error: 'Listing not found.' } });
+        return;
+      }
+
+      if (isLiked) {
+        likedIds.add(id);
+      } else {
+        likedIds.delete(id);
+      }
+
+      req.reply({
+        statusCode: 200,
+        body: {
+          listing: {
+            id,
+            is_liked: isLiked
+          },
+          other_likers: isLiked && id === '1' ? ['other@example.com'] : []
+        }
+      });
+    }).as('likeListing');
+
+    cy.intercept('http://localhost:9999/.netlify/functions/get-listing?id=*', (req) => {
+      if (req.method === 'OPTIONS') {
+        req.reply({ statusCode: 200, body: {} });
+        return;
+      }
       const id = String(req.query['id'] ?? '');
       const listing = listings.find((item) => item.id === id);
       if (!listing) {
@@ -214,14 +261,29 @@ describe('Rental aggregator listing filters', () => {
     cy.contains('button', 'Apply filters').click();
     cy.wait('@getListings');
     cy.contains('article', 'Blue Ranch').within(() => {
+      cy.contains('button', 'Like listing').click();
+    });
+    cy.wait('@likeListing');
+    cy.contains('Blue Ranch').should('not.exist');
+    cy.contains('h2', 'This listing is already liked by others').should('be.visible');
+    cy.contains('other@example.com').should('be.visible');
+    cy.contains('.modal-card button', 'Dismiss').click();
+    cy.contains('h2', 'This listing is already liked by others').should('not.exist');
+
+    cy.contains('article', 'Parkside Home').within(() => {
       cy.contains('button', 'Cross off').click();
     });
     cy.contains('h2', 'Why are you crossing off this listing?').should('be.visible');
     cy.get('.modal-card select').should('have.value', 'did_not_match_requirements');
     cy.contains('.modal-card button', 'Confirm cross off').click();
     cy.wait('@crossOffListing');
-    cy.contains('Blue Ranch').should('not.exist');
-    cy.contains('a', 'Maple Family Home').click();
+    cy.contains('Parkside Home').should('not.exist');
+    cy.get('select').eq(1).select('Any');
+    cy.contains('button', 'Apply filters').click();
+    cy.wait('@getListings');
+    cy.contains('article', 'Maple Family Home').within(() => {
+      cy.contains('a', 'Details').click();
+    });
     cy.wait('@getListing');
     cy.url().should('include', '/listings/4');
     cy.contains('Description').should('be.visible');
