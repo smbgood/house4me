@@ -29,6 +29,35 @@ function getSupabaseAdmin() {
   });
 }
 
+interface PriceHistoryPoint {
+  rent_price: number;
+  captured_at: string;
+}
+
+function collapsePriceHistory(
+  snapshots: Array<{ rent_price: number | null; captured_at: string }>
+): PriceHistoryPoint[] {
+  const collapsed: PriceHistoryPoint[] = [];
+
+  for (const snapshot of snapshots) {
+    if (typeof snapshot.rent_price !== 'number' || snapshot.captured_at.length === 0) {
+      continue;
+    }
+
+    const previous = collapsed[collapsed.length - 1];
+    if (previous && previous.rent_price === snapshot.rent_price) {
+      continue;
+    }
+
+    collapsed.push({
+      rent_price: snapshot.rent_price,
+      captured_at: snapshot.captured_at
+    });
+  }
+
+  return collapsed;
+}
+
 export const handler: Handler = async (event) => {
   if (event.httpMethod === 'OPTIONS') {
     return optionsResponse;
@@ -113,6 +142,27 @@ export const handler: Handler = async (event) => {
     };
   }
 
+  const snapshotResult = await supabaseAdmin
+    .from('rental_listing_snapshots')
+    .select('rent_price, captured_at')
+    .eq('listing_id', listingId)
+    .order('captured_at', { ascending: true })
+    .limit(1000);
+  if (snapshotResult.error) {
+    return {
+      statusCode: 500,
+      headers: defaultHeaders,
+      body: JSON.stringify({ error: snapshotResult.error.message })
+    };
+  }
+
+  const priceHistory = collapsePriceHistory(
+    (snapshotResult.data ?? []).map((row) => ({
+      rent_price: typeof row.rent_price === 'number' ? row.rent_price : null,
+      captured_at: typeof row.captured_at === 'string' ? row.captured_at : ''
+    }))
+  );
+
   const likeResult = await supabaseAdmin
     .from('user_liked_listings')
     .select('listing_id')
@@ -129,7 +179,8 @@ export const handler: Handler = async (event) => {
 
   const listingWithLike = {
     ...listingResult.data,
-    is_liked: Boolean(likeResult.data)
+    is_liked: Boolean(likeResult.data),
+    price_history: priceHistory
   };
 
   return {

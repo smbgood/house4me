@@ -88,6 +88,11 @@ describe('Rental aggregator listing filters', () => {
       fees: {
         monthly_fees_text: 'Air Filter Delivery Fee: $10, Internet & Media: $85'
       },
+      price_history: [
+        { rent_price: 2850, captured_at: '2026-05-20T12:00:00.000Z' },
+        { rent_price: 2925, captured_at: '2026-05-27T12:00:00.000Z' },
+        { rent_price: 2975, captured_at: '2026-06-04T12:00:00.000Z' }
+      ],
       photo_count: 26,
       is_crossed_off: false,
       status: 'active',
@@ -288,6 +293,9 @@ describe('Rental aggregator listing filters', () => {
     cy.url().should('include', '/listings/4');
     cy.contains('Description').should('be.visible');
     cy.contains('Invitation Homes').should('be.visible');
+    cy.contains('Price History').should('be.visible');
+    cy.contains('$2,850').should('be.visible');
+    cy.contains('$2,975').should('be.visible');
   });
 
 });

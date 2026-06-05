@@ -159,6 +159,47 @@ button.ghost {
   margin-top: 1.25rem;
 }
 
+.price-history-chart {
+  margin-top: 0.5rem;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 0.5rem;
+  background: #f9fafb;
+}
+
+.price-history-chart svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.price-history-chart polyline {
+  fill: none;
+  stroke: #2563eb;
+  stroke-width: 3;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.price-history-chart circle {
+  fill: #1d4ed8;
+}
+
+.price-history-list {
+  margin: 0.75rem 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 0.35rem;
+}
+
+.price-history-list li {
+  display: flex;
+  justify-content: space-between;
+  border-bottom: 1px solid #e5e7eb;
+  padding-bottom: 0.25rem;
+}
+
 .state {
   margin-top: 1rem;
 }

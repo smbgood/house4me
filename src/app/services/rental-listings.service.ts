@@ -38,6 +38,12 @@ export interface RentalListing {
   last_seen_at: string;
   created_at?: string;
   updated_at?: string;
+  price_history?: PriceHistoryPoint[];
+}
+
+export interface PriceHistoryPoint {
+  rent_price: number;
+  captured_at: string;
 }
 
 export interface ListingFilters {

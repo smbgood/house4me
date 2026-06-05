@@ -5,11 +5,13 @@ import { ActivatedRoute, Router, RouterModule } from '@angular/router';
 
 import {
   type CrossOffReason,
+  type PriceHistoryPoint,
   RentalListing,
   RentalListingsService
 } from '../services/rental-listings.service';
 
 type CrossOffReasonOption = { value: CrossOffReason; label: string };
+type PriceChartPoint = { x: number; y: number; rentPrice: number; capturedAt: string };
 
 @Component({
   selector: 'app-listing-detail-page',
@@ -20,6 +22,9 @@ type CrossOffReasonOption = { value: CrossOffReason; label: string };
 })
 export class ListingDetailPageComponent implements OnInit {
   listing: RentalListing | null = null;
+  priceHistory: PriceHistoryPoint[] = [];
+  priceChartPoints: PriceChartPoint[] = [];
+  priceHistoryPolyline = '';
   loading = false;
   error = '';
   pendingLike = false;
@@ -37,6 +42,9 @@ export class ListingDetailPageComponent implements OnInit {
     { value: 'no_tub', label: 'No Tub' },
     { value: 'too_close_to_neighbors', label: 'Too Close to Neighbors' }
   ];
+  readonly chartWidth = 720;
+  readonly chartHeight = 220;
+  private readonly chartPadding = 22;
 
   constructor(
     private readonly route: ActivatedRoute,
@@ -56,11 +64,91 @@ export class ListingDetailPageComponent implements OnInit {
     try {
       const response = await this.rentalListingsService.getListing(id);
       this.listing = response.listing;
+      this.setPriceHistory(response.listing.price_history ?? []);
     } catch (error) {
       this.error = error instanceof Error ? error.message : 'Failed to load listing.';
     } finally {
       this.loading = false;
     }
+  }
+
+  private setPriceHistory(history: PriceHistoryPoint[]): void {
+    const normalized = this.normalizePriceHistory(history);
+    this.priceHistory = normalized;
+    this.priceChartPoints = this.buildPriceChartPoints(normalized);
+    this.priceHistoryPolyline = this.priceChartPoints.map((point) => `${point.x},${point.y}`).join(' ');
+  }
+
+  private normalizePriceHistory(history: PriceHistoryPoint[]): PriceHistoryPoint[] {
+    const normalized = history
+      .filter((point) => Number.isFinite(point.rent_price) && typeof point.captured_at === 'string' && point.captured_at.length > 0)
+      .map((point) => ({
+        rent_price: Math.round(point.rent_price),
+        captured_at: point.captured_at
+      }));
+
+    const collapsed: PriceHistoryPoint[] = [];
+    for (const point of normalized) {
+      const previous = collapsed[collapsed.length - 1];
+      if (previous && previous.rent_price === point.rent_price) {
+        continue;
+      }
+      collapsed.push(point);
+    }
+    return collapsed;
+  }
+
+  private buildPriceChartPoints(history: PriceHistoryPoint[]): PriceChartPoint[] {
+    if (history.length === 0) {
+      return [];
+    }
+
+    const prices = history.map((point) => point.rent_price);
+    const minPrice = Math.min(...prices);
+    const maxPrice = Math.max(...prices);
+    const priceRange = maxPrice - minPrice;
+    const plotWidth = this.chartWidth - this.chartPadding * 2;
+    const plotHeight = this.chartHeight - this.chartPadding * 2;
+
+    if (history.length === 1) {
+      return [
+        {
+          x: this.chartWidth / 2,
+          y: this.chartHeight / 2,
+          rentPrice: history[0].rent_price,
+          capturedAt: history[0].captured_at
+        }
+      ];
+    }
+
+    return history.map((point, index) => {
+      const x = this.chartPadding + (plotWidth * index) / (history.length - 1);
+      const y =
+        this.chartPadding +
+        (priceRange === 0 ? plotHeight / 2 : ((maxPrice - point.rent_price) / priceRange) * plotHeight);
+      return {
+        x: Number(x.toFixed(2)),
+        y: Number(y.toFixed(2)),
+        rentPrice: point.rent_price,
+        capturedAt: point.captured_at
+      };
+    });
+  }
+
+  formatChartPrice(value: number): string {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
+      maximumFractionDigits: 0
+    }).format(value);
+  }
+
+  formatChartDate(value: string): string {
+    const asDate = new Date(value);
+    if (Number.isNaN(asDate.getTime())) {
+      return value;
+    }
+    return asDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   }
 
   parseListingDetails(value: unknown): Array<{ category: string; parent_category: string; text: string[] }> {

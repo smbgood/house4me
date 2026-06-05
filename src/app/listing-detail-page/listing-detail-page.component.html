@@ -84,6 +84,24 @@
       </ul>
     </section>
 
+    <section *ngIf="priceHistory.length > 1" class="section-block">
+      <h2>Price History</h2>
+      <div class="price-history-chart">
+        <svg [attr.viewBox]="'0 0 ' + chartWidth + ' ' + chartHeight" role="img" aria-label="Listing price history chart">
+          <polyline [attr.points]="priceHistoryPolyline" />
+          <circle *ngFor="let point of priceChartPoints" [attr.cx]="point.x" [attr.cy]="point.y" r="4">
+            <title>{{ formatChartDate(point.capturedAt) }}: {{ formatChartPrice(point.rentPrice) }}</title>
+          </circle>
+        </svg>
+      </div>
+      <ul class="price-history-list">
+        <li *ngFor="let point of priceHistory">
+          <strong>{{ formatChartDate(point.captured_at) }}</strong>
+          <span>{{ formatChartPrice(point.rent_price) }}</span>
+        </li>
+      </ul>
+    </section>
+
     <a [href]="listing.listing_url" target="_blank" rel="noopener noreferrer" class="external-link">Open original listing</a>
   </section>
 

@@ -53,10 +53,43 @@ export async function upsertListingsAndSnapshots(
   }
 
   const upsertRows = listings.map((listing) => toUpsertRow(listing, seenAtIso));
+  const sourceValues = [...new Set(upsertRows.map((row) => row.source))];
+  const listingHashValues = [...new Set(upsertRows.map((row) => row.listing_url_hash))];
+  const incomingByConflictKey = new Map(upsertRows.map((row) => [`${row.source}:${row.listing_url_hash}`, row]));
+  const existingListingByConflictKey = new Map<string, { id: string; rent_price: number | null }>();
+
+  if (sourceValues.length > 0 && listingHashValues.length > 0) {
+    const existingResult = await supabaseAdmin
+      .from('rental_listings')
+      .select('id, source, listing_url_hash, rent_price')
+      .in('source', sourceValues)
+      .in('listing_url_hash', listingHashValues)
+      .limit(Math.max(listings.length * 4, 200));
+
+    if (existingResult.error) {
+      throw existingResult.error;
+    }
+
+    for (const row of existingResult.data ?? []) {
+      if (
+        typeof row.id !== 'string' ||
+        typeof row.source !== 'string' ||
+        typeof row.listing_url_hash !== 'string' ||
+        !incomingByConflictKey.has(`${row.source}:${row.listing_url_hash}`)
+      ) {
+        continue;
+      }
+      existingListingByConflictKey.set(`${row.source}:${row.listing_url_hash}`, {
+        id: row.id,
+        rent_price: typeof row.rent_price === 'number' ? row.rent_price : null
+      });
+    }
+  }
+
   const upsertResult = await supabaseAdmin
     .from('rental_listings')
     .upsert(upsertRows, { onConflict: 'source,listing_url_hash' })
-    .select('id, rent_price, allows_pets, has_fence, status');
+    .select('id, source, listing_url_hash, rent_price, allows_pets, has_fence, status');
 
   if (upsertResult.error) {
     throw upsertResult.error;
@@ -64,16 +97,56 @@ export async function upsertListingsAndSnapshots(
 
   const updatedRows = upsertResult.data ?? [];
   if (updatedRows.length > 0) {
-    const snapshotRows = updatedRows.map((row) => ({
-      listing_id: row.id,
-      rent_price: row.rent_price,
-      allows_pets: row.allows_pets,
-      has_fence: row.has_fence,
-      status: row.status
-    }));
-    const snapshotResult = await supabaseAdmin.from('rental_listing_snapshots').insert(snapshotRows);
-    if (snapshotResult.error) {
-      throw snapshotResult.error;
+    const snapshotRows = updatedRows
+      .map((row) => {
+        const conflictKey =
+          typeof row.source === 'string' && typeof row.listing_url_hash === 'string'
+            ? `${row.source}:${row.listing_url_hash}`
+            : null;
+        if (!conflictKey) {
+          return null;
+        }
+
+        const previous = existingListingByConflictKey.get(conflictKey);
+        const currentPrice = typeof row.rent_price === 'number' ? row.rent_price : null;
+        if (currentPrice === null) {
+          return null;
+        }
+
+        const isNewListing = !previous;
+        const previousPrice = previous?.rent_price ?? null;
+        const priceChanged = previousPrice !== currentPrice;
+        if (!isNewListing && !priceChanged) {
+          return null;
+        }
+
+        return {
+          listing_id: row.id,
+          rent_price: currentPrice,
+          allows_pets: row.allows_pets,
+          has_fence: row.has_fence,
+          status: row.status,
+          captured_at: seenAtIso
+        };
+      })
+      .filter(
+        (
+          row
+        ): row is {
+          listing_id: string;
+          rent_price: number;
+          allows_pets: boolean | null;
+          has_fence: boolean | null;
+          status: string;
+          captured_at: string;
+        } => Boolean(row)
+      );
+
+    if (snapshotRows.length > 0) {
+      const snapshotResult = await supabaseAdmin.from('rental_listing_snapshots').insert(snapshotRows);
+      if (snapshotResult.error) {
+        throw snapshotResult.error;
+      }
     }
 
     if (options.targetListId) {
