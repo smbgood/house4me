@@ -32,7 +32,11 @@ export class ListingsPageComponent implements OnInit {
   readonly crossOffReasonOptions: CrossOffReasonOption[] = [
     { value: 'did_not_match_requirements', label: 'Did Not Match Requirements' },
     { value: 'did_not_like_area', label: 'Did Not Like Area' },
-    { value: 'did_not_like_house', label: 'Did Not Like House' }
+    { value: 'did_not_like_house', label: 'Did Not Like House' },
+    { value: 'no_fence', label: 'No Fence' },
+    { value: 'two_story', label: 'Two Story' },
+    { value: 'no_tub', label: 'No Tub' },
+    { value: 'too_close_to_neighbors', label: 'Too Close to Neighbors' }
   ];
 
   source = '';

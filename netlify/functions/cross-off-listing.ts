@@ -13,7 +13,11 @@ interface CrossOffBody {
 const CROSS_OFF_REASONS = [
   'did_not_match_requirements',
   'did_not_like_area',
-  'did_not_like_house'
+  'did_not_like_house',
+  'no_fence',
+  'two_story',
+  'no_tub',
+  'too_close_to_neighbors'
 ] as const;
 
 type CrossOffReason = (typeof CROSS_OFF_REASONS)[number];
@@ -122,7 +126,7 @@ export const handler: Handler = async (event) => {
       headers: defaultHeaders,
       body: JSON.stringify({
         error:
-          'Body parameter crossOffReason is required and must be one of: did_not_match_requirements, did_not_like_area, did_not_like_house.'
+          `Body parameter crossOffReason is required and must be one of: ${CROSS_OFF_REASONS.join(', ')}.`
       })
     };
   }

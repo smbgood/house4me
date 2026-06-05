@@ -70,7 +70,11 @@ export interface ListingCrossOffResponse {
 export type CrossOffReason =
   | 'did_not_match_requirements'
   | 'did_not_like_area'
-  | 'did_not_like_house';
+  | 'did_not_like_house'
+  | 'no_fence'
+  | 'two_story'
+  | 'no_tub'
+  | 'too_close_to_neighbors';
 
 export interface ListingLikeResponse {
   listing: {
