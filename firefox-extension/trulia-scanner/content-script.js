@@ -10,6 +10,11 @@ const FORRENT_BRIDGE_REQUEST_TYPE = 'HOUSE4ME_FORRENT_ENRICH_REQUEST';
 const FORRENT_BRIDGE_RESPONSE_TYPE = 'HOUSE4ME_FORRENT_ENRICH_RESPONSE';
 const FORRENT_BRIDGE_PROGRESS_TYPE = 'HOUSE4ME_FORRENT_ENRICH_PROGRESS';
 const FORRENT_BRIDGE_SCRIPT_ID = 'house4me-forrent-enrichment-bridge';
+const FORRENT_DETAIL_DELAY_MS = 3000;
+const FORRENT_DETAIL_TIMEOUT_MS = 15000;
+const FORRENT_ENRICHMENT_TIMEOUT_BUFFER_MS = 30000;
+
+let activeForRentJobId = null;
 
 function isObject(value) {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
@@ -86,6 +91,20 @@ function mergeForRentListingDetails(listing, detail) {
 
 function createForRentEnrichmentRequestId() {
   return `forrent-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function calculateForRentEnrichmentTimeoutMs(totalListings) {
+  const safeTotal = Number.isFinite(totalListings) ? Math.max(0, totalListings) : 0;
+  const expectedMs = safeTotal * (FORRENT_DETAIL_DELAY_MS + FORRENT_DETAIL_TIMEOUT_MS) + FORRENT_ENRICHMENT_TIMEOUT_BUFFER_MS;
+  return Math.max(120000, expectedMs);
+}
+
+function safeSendRuntimeMessage(message) {
+  try {
+    browser.runtime.sendMessage(message);
+  } catch {
+    // Popup may not be open; ignore failures.
+  }
 }
 
 function ensureForRentEnrichmentBridgeInstalled() {
@@ -601,56 +620,57 @@ function ensureForRentEnrichmentBridgeInstalled() {
 
     async function enrichListingUrls(listingUrls, requestId) {
       const detailByUrl = {};
-      const queue = [...listingUrls];
-      const total = queue.length;
+      const total = listingUrls.length;
       let completed = 0;
-      const concurrency = Math.min(4, Math.max(1, total));
-      const timeoutMs = 15000;
+      const timeoutMs = FORRENT_DETAIL_TIMEOUT_MS;
 
-      async function worker() {
-        while (queue.length > 0) {
-          const listingUrl = queue.shift();
-          if (!listingUrl) {
-            continue;
-          }
-          let detailResult;
-          try {
-            const htmlText = await fetchDetailWithTimeout(listingUrl, timeoutMs);
-            detailResult = parseForRentDetail(htmlText, listingUrl);
-          } catch (error) {
-            detailResult = {
-              listingUrl,
-              detailFetchStatus: error && error.name === 'AbortError' ? 'timeout' : 'error',
-              detailFetchError: error instanceof Error ? error.message : String(error || 'Detail fetch failed')
-            };
-          }
+      function delay(ms) {
+        return new Promise((resolve) => {
+          setTimeout(resolve, ms);
+        });
+      }
 
-          detailByUrl[listingUrl] = detailResult;
-          completed += 1;
-          window.postMessage(
-            {
-              type: 'HOUSE4ME_FORRENT_ENRICH_PROGRESS',
-              requestId,
-              completed,
-              total,
-              listingUrl,
-              detailFetchStatus: detailResult.detailFetchStatus || 'unknown',
-              amenityTagCount:
-                detailResult.amenityExtractionDebug && Number.isFinite(detailResult.amenityExtractionDebug.totalAmenityTags)
-                  ? detailResult.amenityExtractionDebug.totalAmenityTags
-                  : null,
-              amenityExtractionStrategy:
-                detailResult.amenityExtractionDebug && typeof detailResult.amenityExtractionDebug.extractionStrategy === 'string'
-                  ? detailResult.amenityExtractionDebug.extractionStrategy
-                  : null
-            },
-            window.location.origin
-          );
+      for (let index = 0; index < listingUrls.length; index += 1) {
+        const listingUrl = listingUrls[index];
+        let detailResult;
+        try {
+          const htmlText = await fetchDetailWithTimeout(listingUrl, timeoutMs);
+          detailResult = parseForRentDetail(htmlText, listingUrl);
+        } catch (error) {
+          detailResult = {
+            listingUrl,
+            detailFetchStatus: error && error.name === 'AbortError' ? 'timeout' : 'error',
+            detailFetchError: error instanceof Error ? error.message : String(error || 'Detail fetch failed')
+          };
+        }
+
+        detailByUrl[listingUrl] = detailResult;
+        completed += 1;
+        window.postMessage(
+          {
+            type: 'HOUSE4ME_FORRENT_ENRICH_PROGRESS',
+            requestId,
+            completed,
+            total,
+            listingUrl,
+            detailFetchStatus: detailResult.detailFetchStatus || 'unknown',
+            amenityTagCount:
+              detailResult.amenityExtractionDebug && Number.isFinite(detailResult.amenityExtractionDebug.totalAmenityTags)
+                ? detailResult.amenityExtractionDebug.totalAmenityTags
+                : null,
+            amenityExtractionStrategy:
+              detailResult.amenityExtractionDebug && typeof detailResult.amenityExtractionDebug.extractionStrategy === 'string'
+                ? detailResult.amenityExtractionDebug.extractionStrategy
+                : null
+          },
+          window.location.origin
+        );
+
+        if (index < listingUrls.length - 1) {
+          await delay(FORRENT_DETAIL_DELAY_MS);
         }
       }
 
-      const workers = Array.from({ length: concurrency }, () => worker());
-      await Promise.all(workers);
       return detailByUrl;
     }
 
@@ -687,7 +707,7 @@ function ensureForRentEnrichmentBridgeInstalled() {
   script.remove();
 }
 
-function enrichForRentListingsViaScriptlet(listings) {
+function enrichForRentListingsViaScriptlet(listings, options = {}) {
   if (!Array.isArray(listings) || listings.length === 0) {
     return Promise.resolve({
       listings: [],
@@ -701,8 +721,9 @@ function enrichForRentListingsViaScriptlet(listings) {
 
   ensureForRentEnrichmentBridgeInstalled();
 
-  const requestId = createForRentEnrichmentRequestId();
+  const requestId = typeof options.requestId === 'string' && options.requestId ? options.requestId : createForRentEnrichmentRequestId();
   const dedupedUrls = [...new Set(listings.map((listing) => listing?.listingUrl).filter((url) => typeof url === 'string'))];
+  const timeoutMs = calculateForRentEnrichmentTimeoutMs(dedupedUrls.length);
 
   return new Promise((resolve) => {
     let timeoutId = null;
@@ -752,14 +773,21 @@ function enrichForRentListingsViaScriptlet(listings) {
       if (data.type === FORRENT_BRIDGE_PROGRESS_TYPE) {
         const progressCompleted = Number.isFinite(data.completed) ? data.completed : 0;
         const progressTotal = Number.isFinite(data.total) ? data.total : dedupedUrls.length;
-        try {
-          browser.runtime.sendMessage({
+        if (typeof options.onProgress === 'function') {
+          options.onProgress({
+            completed: progressCompleted,
+            total: progressTotal,
+            listingUrl: typeof data.listingUrl === 'string' ? data.listingUrl : null,
+            detailFetchStatus: typeof data.detailFetchStatus === 'string' ? data.detailFetchStatus : 'unknown'
+          });
+        }
+        if (!options.suppressRuntimeProgress) {
+          safeSendRuntimeMessage({
             type: 'FORRENT_ENRICH_PROGRESS',
+            requestId,
             completed: progressCompleted,
             total: progressTotal
           });
-        } catch {
-          // Popup may not be open; ignore progress forwarding failures.
         }
         return;
       }
@@ -780,7 +808,7 @@ function enrichForRentListingsViaScriptlet(listings) {
         };
       });
       finalize(fallbackDetails);
-    }, 120000);
+    }, timeoutMs);
 
     window.postMessage(
       {
@@ -791,6 +819,56 @@ function enrichForRentListingsViaScriptlet(listings) {
       window.location.origin
     );
   });
+}
+
+function startForRentEnrichmentJob(jobId, listings) {
+  const normalizedListings = Array.isArray(listings) ? listings.filter((listing) => listing && typeof listing === 'object') : [];
+  const total = normalizedListings.length;
+  activeForRentJobId = jobId;
+
+  safeSendRuntimeMessage({
+    type: 'FORRENT_ENRICH_STARTED',
+    jobId,
+    total
+  });
+
+  void enrichForRentListingsViaScriptlet(normalizedListings, {
+    requestId: jobId,
+    suppressRuntimeProgress: true,
+    onProgress(progress) {
+      safeSendRuntimeMessage({
+        type: 'FORRENT_ENRICH_PROGRESS',
+        jobId,
+        completed: progress.completed,
+        total: progress.total,
+        listingUrl: progress.listingUrl,
+        detailFetchStatus: progress.detailFetchStatus
+      });
+    }
+  })
+    .then((result) => {
+      safeSendRuntimeMessage({
+        type: 'FORRENT_ENRICH_COMPLETE',
+        jobId,
+        total,
+        completed: total,
+        listings: result.listings,
+        enrichment: result.enrichment
+      });
+    })
+    .catch((error) => {
+      safeSendRuntimeMessage({
+        type: 'FORRENT_ENRICH_ERROR',
+        jobId,
+        error: error instanceof Error ? error.message : String(error || 'Unknown enrichment error'),
+        total
+      });
+    })
+    .finally(() => {
+      if (activeForRentJobId === jobId) {
+        activeForRentJobId = null;
+      }
+    });
 }
 
 function getPreferredAnchor(container, source) {
@@ -1096,7 +1174,40 @@ function getSourceFromHostname() {
 }
 
 browser.runtime.onMessage.addListener((message) => {
-  if (!message || (message.type !== 'SCAN_TRULIA_PAGE' && message.type !== 'SCAN_RENTAL_PAGE')) {
+  if (!message) {
+    return undefined;
+  }
+
+  if (message.type === 'START_FORRENT_ENRICHMENT') {
+    const source = getSourceFromHostname();
+    if (source !== 'forrent') {
+      return Promise.resolve({
+        ok: false,
+        error: 'ForRent enrichment can only run on a ForRent tab.'
+      });
+    }
+    if (activeForRentJobId) {
+      return Promise.resolve({
+        ok: false,
+        error: 'A ForRent enrichment job is already running.',
+        jobId: activeForRentJobId
+      });
+    }
+
+    const incomingListings = Array.isArray(message.listings) ? message.listings : [];
+    const jobId =
+      typeof message.jobId === 'string' && message.jobId.trim().length > 0
+        ? message.jobId.trim()
+        : createForRentEnrichmentRequestId();
+    startForRentEnrichmentJob(jobId, incomingListings);
+    return Promise.resolve({
+      ok: true,
+      jobId,
+      total: incomingListings.length
+    });
+  }
+
+  if (message.type !== 'SCAN_TRULIA_PAGE' && message.type !== 'SCAN_RENTAL_PAGE') {
     return undefined;
   }
 
@@ -1111,12 +1222,11 @@ browser.runtime.onMessage.addListener((message) => {
 
   if (source === 'forrent') {
     const listings = scrapeForRentListingsFromPage();
-    return enrichForRentListingsViaScriptlet(listings).then((result) => ({
+    return Promise.resolve({
       source,
-      listings: result.listings,
-      count: result.listings.length,
-      enrichment: result.enrichment
-    }));
+      listings,
+      count: listings.length
+    });
   }
 
   const listings =

@@ -14,6 +14,7 @@ const LISTS_STORAGE_KEY = 'selectedImportListSlug';
 let currentSource = null;
 let currentLists = [{ slug: MAIN_LIST_SLUG, name: 'Main' }];
 let selectedListSlug = MAIN_LIST_SLUG;
+let activeForRentJob = null;
 
 function setStatus(message) {
   statusEl.textContent = message;
@@ -236,132 +237,255 @@ async function createListForActiveSource() {
   }
 }
 
-async function scanCurrentPage() {
-  const settings = await getSettings();
-  const tab = await getActiveTab();
-  if (!tab || !tab.id || !tab.url) {
-    setStatus('Unable to determine active tab.');
-    return;
+async function ingestListings({
+  source,
+  listings,
+  selectedSlug,
+  selectedListLabel,
+  ingestToken,
+  enrichmentSummary
+}) {
+  setStatus(`Found ${listings.length} ${source} listings. Sending...`);
+  const requestBody = {
+    listings
+  };
+  if (selectedSlug !== MAIN_LIST_SLUG) {
+    requestBody.listSlug = selectedSlug;
   }
 
-  let source = getSourceFromUrl(tab.url);
+  const response = await fetch(House4MeConfig.getIngestUrl(source), {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${ingestToken}`
+    },
+    body: JSON.stringify(requestBody)
+  });
 
-  if (!source) {
-    setStatus('Active tab must be on Trulia, ForRent, Zillow, or Realtor.com.');
-    return;
-  }
-  currentSource = source;
-
-  const ingestToken = getTokenForSource(settings, source);
-  if (!ingestToken) {
-    setStatus(`Missing ${source} ingest token. Open options and configure it first.`);
-    return;
-  }
-
-  setStatus(source === 'forrent' ? 'Scanning ForRent page and enriching detail pages...' : `Scanning ${source} page...`);
-  let scanResult;
-  try {
-    scanResult = await browser.tabs.sendMessage(tab.id, { type: 'SCAN_RENTAL_PAGE' });
-  } catch (error) {
-    setStatus(`Failed to scan page: ${String(error)}`);
-    return;
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(`Ingest failed (${response.status}): ${payload.error ?? 'Unknown error'}`);
   }
 
-  if (!scanResult || !Array.isArray(scanResult.listings)) {
-    setStatus('No scan result returned from page.');
-    return;
-  }
-
-  if (scanResult.listings.length === 0) {
-    setStatus('Scan completed but found 0 listings with price text.');
-    return;
-  }
-
-  if (scanResult.source && scanResult.source !== source) {
-    source = scanResult.source;
-  }
-
-  const selectedSlug = listSelect.value || MAIN_LIST_SLUG;
-  await saveSelectedListSlug(selectedSlug);
-  const selectedList = currentLists.find((list) => list.slug === selectedSlug);
-  const selectedListLabel = selectedList?.name ?? 'Main';
-
-  setStatus(`Found ${scanResult.listings.length} ${source} listings. Sending...`);
-  try {
-    const requestBody = {
-      listings: scanResult.listings
-    };
-    if (selectedSlug !== MAIN_LIST_SLUG) {
-      requestBody.listSlug = selectedSlug;
-    }
-
-    const response = await fetch(House4MeConfig.getIngestUrl(source), {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${ingestToken}`
-      },
-      body: JSON.stringify(requestBody)
-    });
-
-    const payload = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      setStatus(`Ingest failed (${response.status}): ${payload.error ?? 'Unknown error'}`);
-      return;
-    }
-
-    if (payload.status === 'queued') {
-      const runId = typeof payload.runId === 'string' ? payload.runId : 'unknown';
-      const shortRunId = runId.length > 8 ? runId.slice(0, 8) : runId;
-      setStatus(
-        `Ingest queued.
+  if (payload.status === 'queued') {
+    const runId = typeof payload.runId === 'string' ? payload.runId : 'unknown';
+    const shortRunId = runId.length > 8 ? runId.slice(0, 8) : runId;
+    setStatus(
+      `Ingest queued.
 Run: ${shortRunId}
 List: ${selectedListLabel}
 Received: ${payload.received ?? '?'}
 Accepted: ${payload.accepted ?? '?'}
 Rejected: ${payload.rejected ?? '?'}`
-      );
-      return;
-    }
+    );
+    return;
+  }
 
-    const enrichmentSummary =
-      source === 'forrent' && scanResult.enrichment
-        ? `
-Enriched: ${scanResult.enrichment.succeeded ?? '?'} / ${scanResult.enrichment.attempted ?? '?'}
-Enrich Failed: ${scanResult.enrichment.failed ?? '?'}
-With Amenities: ${scanResult.enrichment.amenityDiagnostics?.withAmenities ?? '?'}
-Missing Amenities: ${scanResult.enrichment.amenityDiagnostics?.withoutAmenities ?? '?'}`
-        : '';
-    setStatus(
-      `Ingest complete.
+  const enrichmentText =
+    source === 'forrent' && enrichmentSummary
+      ? `
+Enriched: ${enrichmentSummary.succeeded ?? '?'} / ${enrichmentSummary.attempted ?? '?'}
+Enrich Failed: ${enrichmentSummary.failed ?? '?'}
+With Amenities: ${enrichmentSummary.amenityDiagnostics?.withAmenities ?? '?'}
+Missing Amenities: ${enrichmentSummary.amenityDiagnostics?.withoutAmenities ?? '?'}`
+      : '';
+
+  setStatus(
+    `Ingest complete.
 List: ${selectedListLabel}
 Received: ${payload.received ?? '?'}
 Accepted: ${payload.accepted ?? '?'}
 Upserted: ${payload.upserted ?? '?'}
-Rejected: ${payload.rejected ?? '?'}${enrichmentSummary}${
-        payload.amenityDiagnostics
-          ? `
+Rejected: ${payload.rejected ?? '?'}${enrichmentText}${
+      payload.amenityDiagnostics
+        ? `
 Ingest w/ Amenities: ${payload.amenityDiagnostics.withAmenityTags ?? '?'}
 Ingest w/o Amenities: ${payload.amenityDiagnostics.withoutAmenityTags ?? '?'}`
-          : ''
-      }`
-    );
-  } catch (error) {
-    setStatus(`Request failed: ${String(error)}`);
+        : ''
+    }`
+  );
+}
+
+async function scanCurrentPage() {
+  if (activeForRentJob) {
+    setStatus(`ForRent enrichment is already running.
+Progress: ${activeForRentJob.completed}/${activeForRentJob.total}`);
+    return;
+  }
+
+  scanButton.disabled = true;
+  try {
+    const settings = await getSettings();
+    const tab = await getActiveTab();
+    if (!tab || !tab.id || !tab.url) {
+      setStatus('Unable to determine active tab.');
+      return;
+    }
+
+    let source = getSourceFromUrl(tab.url);
+    if (!source) {
+      setStatus('Active tab must be on Trulia, ForRent, Zillow, or Realtor.com.');
+      return;
+    }
+    currentSource = source;
+
+    const ingestToken = getTokenForSource(settings, source);
+    if (!ingestToken) {
+      setStatus(`Missing ${source} ingest token. Open options and configure it first.`);
+      return;
+    }
+
+    setStatus(source === 'forrent' ? 'Scanning ForRent page...' : `Scanning ${source} page...`);
+    let scanResult;
+    try {
+      scanResult = await browser.tabs.sendMessage(tab.id, { type: 'SCAN_RENTAL_PAGE' });
+    } catch (error) {
+      setStatus(`Failed to scan page: ${String(error)}`);
+      return;
+    }
+
+    if (!scanResult || !Array.isArray(scanResult.listings)) {
+      setStatus('No scan result returned from page.');
+      return;
+    }
+
+    if (scanResult.listings.length === 0) {
+      setStatus('Scan completed but found 0 listings with price text.');
+      return;
+    }
+
+    if (scanResult.source && scanResult.source !== source) {
+      source = scanResult.source;
+    }
+
+    const selectedSlug = listSelect.value || MAIN_LIST_SLUG;
+    await saveSelectedListSlug(selectedSlug);
+    const selectedList = currentLists.find((list) => list.slug === selectedSlug);
+    const selectedListLabel = selectedList?.name ?? 'Main';
+
+    if (source !== 'forrent') {
+      await ingestListings({
+        source,
+        listings: scanResult.listings,
+        selectedSlug,
+        selectedListLabel,
+        ingestToken,
+        enrichmentSummary: scanResult.enrichment ?? null
+      });
+      return;
+    }
+
+    const requestedJobId = `forrent-job-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    setStatus(`Found ${scanResult.listings.length} ForRent listings.
+Starting detail enrichment in background...`);
+
+    let startResult;
+    try {
+      startResult = await browser.tabs.sendMessage(tab.id, {
+        type: 'START_FORRENT_ENRICHMENT',
+        jobId: requestedJobId,
+        listings: scanResult.listings
+      });
+    } catch (error) {
+      setStatus(`Failed to start ForRent enrichment: ${String(error)}`);
+      return;
+    }
+
+    if (!startResult?.ok) {
+      setStatus(`Unable to start ForRent enrichment: ${startResult?.error ?? 'Unknown error'}`);
+      return;
+    }
+
+    activeForRentJob = {
+      jobId: startResult.jobId,
+      tabId: tab.id,
+      source,
+      ingestToken,
+      selectedSlug,
+      selectedListLabel,
+      total: Number.isFinite(startResult.total) ? startResult.total : scanResult.listings.length,
+      completed: 0
+    };
+    scanButton.disabled = true;
+    setStatus(`Scanning ForRent page and enriching detail pages...
+Progress: 0/${activeForRentJob.total}
+Rate limit: 1 request every 3000 ms`);
+  } finally {
+    if (!activeForRentJob) {
+      scanButton.disabled = false;
+    }
   }
 }
 
 browser.runtime.onMessage.addListener((message) => {
-  if (!message || message.type !== 'FORRENT_ENRICH_PROGRESS') {
+  if (!message) {
     return;
   }
-  if (currentSource !== 'forrent') {
+  if (!activeForRentJob && message.type !== 'FORRENT_ENRICH_STARTED') {
     return;
   }
-  const completed = Number.isFinite(message.completed) ? message.completed : 0;
-  const total = Number.isFinite(message.total) ? message.total : 0;
-  setStatus(`Scanning ForRent page and enriching detail pages...
-Progress: ${completed}/${total}`);
+
+  if (message.type === 'FORRENT_ENRICH_STARTED') {
+    if (!activeForRentJob || message.jobId !== activeForRentJob.jobId) {
+      return;
+    }
+    const total = Number.isFinite(message.total) ? message.total : activeForRentJob.total;
+    activeForRentJob.total = total;
+    setStatus(`Scanning ForRent page and enriching detail pages...
+Progress: 0/${total}
+Rate limit: 1 request every 3000 ms`);
+    return;
+  }
+
+  if (message.type === 'FORRENT_ENRICH_PROGRESS') {
+    if (!activeForRentJob || message.jobId !== activeForRentJob.jobId) {
+      return;
+    }
+    const completed = Number.isFinite(message.completed) ? message.completed : 0;
+    const total = Number.isFinite(message.total) ? message.total : activeForRentJob.total;
+    activeForRentJob.completed = completed;
+    activeForRentJob.total = total;
+    setStatus(`Scanning ForRent page and enriching detail pages...
+Progress: ${completed}/${total}
+Rate limit: 1 request every 3000 ms`);
+    return;
+  }
+
+  if (message.type === 'FORRENT_ENRICH_ERROR') {
+    if (!activeForRentJob || message.jobId !== activeForRentJob.jobId) {
+      return;
+    }
+    activeForRentJob = null;
+    scanButton.disabled = false;
+    setStatus(`ForRent enrichment failed: ${message.error ?? 'Unknown error'}`);
+    return;
+  }
+
+  if (message.type !== 'FORRENT_ENRICH_COMPLETE') {
+    return;
+  }
+  if (!activeForRentJob || message.jobId !== activeForRentJob.jobId) {
+    return;
+  }
+
+  const finishedJob = activeForRentJob;
+  activeForRentJob = null;
+  setStatus(`ForRent enrichment complete.
+Preparing ingest request...`);
+  void ingestListings({
+    source: finishedJob.source,
+    listings: Array.isArray(message.listings) ? message.listings : [],
+    selectedSlug: finishedJob.selectedSlug,
+    selectedListLabel: finishedJob.selectedListLabel,
+    ingestToken: finishedJob.ingestToken,
+    enrichmentSummary: message.enrichment ?? null
+  })
+    .catch((error) => {
+      setStatus(`Request failed: ${String(error)}`);
+    })
+    .finally(() => {
+      scanButton.disabled = false;
+    });
 });
 
 scanButton.addEventListener('click', () => {
