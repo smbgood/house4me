@@ -108,6 +108,16 @@ export interface CreateListingListResponse {
   list: ListingList;
 }
 
+export type ListingTransferOperation = 'copy' | 'move';
+
+export interface TransferListingListMembershipResponse {
+  listingId: string;
+  operation: ListingTransferOperation;
+  targetList: ListingList;
+  sourceList: ListingList | null;
+  removedFromSource: boolean;
+}
+
 @Injectable({
   providedIn: 'root'
 })
@@ -258,5 +268,30 @@ export class RentalListingsService {
     }
 
     return (await response.json()) as CreateListingListResponse;
+  }
+
+  async transferListingListMembership(input: {
+    listingId: string;
+    operation: ListingTransferOperation;
+    targetListSlug: string;
+    sourceListSlug?: string;
+  }): Promise<TransferListingListMembershipResponse> {
+    const url = `${environment.apiUrl}/transfer-listing-list-membership`;
+    const refreshToken = this.googleAuthService.getRefreshToken();
+    const headers: HeadersInit = {
+      'Content-Type': 'application/json',
+      ...(refreshToken ? { Authorization: `Bearer ${refreshToken}` } : {})
+    };
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(input)
+    });
+    if (!response.ok) {
+      throw new Error(`Failed to ${input.operation} listing (${response.status}).`);
+    }
+
+    return (await response.json()) as TransferListingListMembershipResponse;
   }
 }

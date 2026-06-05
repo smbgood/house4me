@@ -101,7 +101,7 @@
         </p>
       </div>
       <div class="listing-side">
-        <a [routerLink]="['/listings', listing.id]" class="details-btn">Details</a>
+        <a [routerLink]="['/listings', listing.id]" [queryParams]="{ list: selectedListSlug }" class="details-btn">Details</a>
         <button
           type="button"
           class="like-toggle"

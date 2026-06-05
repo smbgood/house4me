@@ -1,7 +1,7 @@
 import { CommonModule } from '@angular/common';
 import { Component, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { RouterModule } from '@angular/router';
+import { ActivatedRoute, Router, RouterModule } from '@angular/router';
 
 import {
   type CrossOffReason,
@@ -54,10 +54,19 @@ export class ListingsPageComponent implements OnInit {
   maxRent: number | null = null;
   query = '';
 
-  constructor(private readonly rentalListingsService: RentalListingsService) {}
+  constructor(
+    private readonly rentalListingsService: RentalListingsService,
+    private readonly route: ActivatedRoute,
+    private readonly router: Router
+  ) {}
 
   async ngOnInit(): Promise<void> {
+    const listFromQuery = this.route.snapshot.queryParamMap.get('list')?.trim().toLowerCase();
+    if (listFromQuery) {
+      this.selectedListSlug = listFromQuery;
+    }
     await this.loadListingLists();
+    await this.syncSelectedListInUrl(true);
     await this.load();
   }
 
@@ -76,6 +85,7 @@ export class ListingsPageComponent implements OnInit {
   }
 
   async changeSelectedList(): Promise<void> {
+    await this.syncSelectedListInUrl();
     await this.load();
   }
 
@@ -94,6 +104,7 @@ export class ListingsPageComponent implements OnInit {
       if (response.list?.slug) {
         this.selectedListSlug = response.list.slug;
       }
+      await this.syncSelectedListInUrl();
       await this.load();
     } catch (error) {
       this.listError = error instanceof Error ? error.message : 'Failed to create listing list.';
@@ -214,5 +225,20 @@ export class ListingsPageComponent implements OnInit {
     } finally {
       this.loadingLists = false;
     }
+  }
+
+  private async syncSelectedListInUrl(replaceUrl = false): Promise<void> {
+    const currentList = this.route.snapshot.queryParamMap.get('list')?.trim().toLowerCase() ?? '';
+    const selectedList = this.selectedListSlug.trim().toLowerCase();
+    if (currentList === selectedList) {
+      return;
+    }
+
+    await this.router.navigate([], {
+      relativeTo: this.route,
+      queryParams: { list: selectedList || 'main' },
+      queryParamsHandling: 'merge',
+      replaceUrl
+    });
   }
 }

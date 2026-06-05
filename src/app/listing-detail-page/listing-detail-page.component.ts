@@ -5,6 +5,8 @@ import { ActivatedRoute, Router, RouterModule } from '@angular/router';
 
 import {
   type CrossOffReason,
+  type ListingList,
+  type ListingTransferOperation,
   type PriceHistoryPoint,
   RentalListing,
   RentalListingsService
@@ -29,8 +31,17 @@ export class ListingDetailPageComponent implements OnInit {
   error = '';
   pendingLike = false;
   pendingCrossOff = false;
+  pendingTransfer = false;
   showCrossOffModal = false;
+  showTransferModal = false;
   coLikeModalEmails: string[] | null = null;
+  transferSuccessMessage = '';
+  currentListSlug = 'main';
+  transferOperation: ListingTransferOperation = 'copy';
+  targetListSlug = '';
+  transferModalError = '';
+  loadingTransferLists = false;
+  transferLists: ListingList[] = [];
   selectedCrossOffReason: CrossOffReason | '' = '';
   crossOffModalError = '';
   readonly crossOffReasonOptions: CrossOffReasonOption[] = [
@@ -54,6 +65,10 @@ export class ListingDetailPageComponent implements OnInit {
 
   async ngOnInit(): Promise<void> {
     const id = this.route.snapshot.paramMap.get('id');
+    const listSlug = this.route.snapshot.queryParamMap.get('list')?.trim().toLowerCase();
+    if (listSlug) {
+      this.currentListSlug = listSlug;
+    }
     if (!id) {
       this.error = 'Listing ID is required.';
       return;
@@ -65,11 +80,32 @@ export class ListingDetailPageComponent implements OnInit {
       const response = await this.rentalListingsService.getListing(id);
       this.listing = response.listing;
       this.setPriceHistory(response.listing.price_history ?? []);
+      await this.loadTransferLists();
     } catch (error) {
       this.error = error instanceof Error ? error.message : 'Failed to load listing.';
     } finally {
       this.loading = false;
     }
+  }
+
+  get canMoveFromCurrentList(): boolean {
+    return this.currentListSlug !== 'main';
+  }
+
+  get filteredTransferTargetLists(): ListingList[] {
+    return this.transferLists.filter(
+      (list) => !list.is_system && list.slug !== 'main' && list.slug !== this.currentListSlug
+    );
+  }
+
+  get canSubmitTransfer(): boolean {
+    if (this.pendingTransfer || !this.listing || !this.targetListSlug) {
+      return false;
+    }
+    if (this.transferOperation === 'move' && !this.canMoveFromCurrentList) {
+      return false;
+    }
+    return true;
   }
 
   private setPriceHistory(history: PriceHistoryPoint[]): void {
@@ -189,6 +225,75 @@ export class ListingDetailPageComponent implements OnInit {
     this.coLikeModalEmails = null;
   }
 
+  async openTransferModal(): Promise<void> {
+    if (!this.listing || this.pendingTransfer) {
+      return;
+    }
+
+    this.transferModalError = '';
+    this.transferSuccessMessage = '';
+    await this.loadTransferLists();
+    this.transferOperation = this.canMoveFromCurrentList ? 'move' : 'copy';
+    this.targetListSlug = this.filteredTransferTargetLists[0]?.slug ?? '';
+    this.showTransferModal = true;
+  }
+
+  closeTransferModal(): void {
+    if (this.pendingTransfer) {
+      return;
+    }
+    this.showTransferModal = false;
+    this.transferModalError = '';
+  }
+
+  onTransferOperationChange(operation: ListingTransferOperation): void {
+    if (operation === 'move' && !this.canMoveFromCurrentList) {
+      this.transferOperation = 'copy';
+      return;
+    }
+    this.transferOperation = operation;
+    this.transferModalError = '';
+  }
+
+  async confirmTransfer(): Promise<void> {
+    if (!this.listing || !this.canSubmitTransfer) {
+      return;
+    }
+
+    if (this.transferOperation === 'move' && !this.canMoveFromCurrentList) {
+      this.transferModalError = 'Move is only available when viewing a custom source list.';
+      return;
+    }
+
+    this.pendingTransfer = true;
+    this.transferModalError = '';
+    this.error = '';
+    try {
+      await this.rentalListingsService.transferListingListMembership({
+        listingId: this.listing.id,
+        operation: this.transferOperation,
+        targetListSlug: this.targetListSlug,
+        sourceListSlug: this.transferOperation === 'move' ? this.currentListSlug : undefined
+      });
+      if (this.transferOperation === 'move') {
+        this.currentListSlug = this.targetListSlug;
+        await this.router.navigate([], {
+          relativeTo: this.route,
+          queryParams: { list: this.currentListSlug },
+          queryParamsHandling: 'merge',
+          replaceUrl: true
+        });
+      }
+      const actionLabel = this.transferOperation === 'move' ? 'Moved' : 'Copied';
+      this.transferSuccessMessage = `${actionLabel} listing to ${this.readableListName(this.targetListSlug)}.`;
+      this.closeTransferModal();
+    } catch (error) {
+      this.transferModalError = error instanceof Error ? error.message : 'Failed to transfer listing.';
+    } finally {
+      this.pendingTransfer = false;
+    }
+  }
+
   openCrossOffModal(): void {
     if (!this.listing || this.pendingCrossOff || this.listing.is_crossed_off) {
       return;
@@ -248,5 +353,21 @@ export class ListingDetailPageComponent implements OnInit {
     } finally {
       this.pendingLike = false;
     }
+  }
+
+  private async loadTransferLists(): Promise<void> {
+    this.loadingTransferLists = true;
+    try {
+      const response = await this.rentalListingsService.getListingLists();
+      this.transferLists = response.lists ?? [];
+    } catch {
+      this.transferLists = [];
+    } finally {
+      this.loadingTransferLists = false;
+    }
+  }
+
+  private readableListName(slug: string): string {
+    return this.transferLists.find((list) => list.slug === slug)?.name ?? slug;
   }
 }

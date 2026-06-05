@@ -1,8 +1,9 @@
 <main class="detail-page">
-  <a routerLink="/" class="back-link">Back to listings</a>
+  <a routerLink="/" [queryParams]="{ list: currentListSlug }" class="back-link">Back to listings</a>
 
   <section *ngIf="loading" class="state">Loading listing details...</section>
   <section *ngIf="error" class="state error">{{ error }}</section>
+  <section *ngIf="transferSuccessMessage" class="state success">{{ transferSuccessMessage }}</section>
 
   <section *ngIf="!loading && !error && listing" class="detail-card">
     <header class="detail-header">
@@ -20,6 +21,9 @@
           (click)="openCrossOffModal()"
         >
           {{ pendingCrossOff ? 'Crossing off...' : 'Cross off' }}
+        </button>
+        <button type="button" class="transfer-list" [disabled]="pendingTransfer || loadingTransferLists" (click)="openTransferModal()">
+          {{ loadingTransferLists ? 'Loading lists...' : 'Move / Copy list' }}
         </button>
       </div>
     </header>
@@ -123,6 +127,59 @@
         <button type="button" class="ghost" (click)="closeCrossOffModal()">Cancel</button>
         <button type="button" class="cross-off" [disabled]="pendingCrossOff" (click)="confirmCrossOffListing()">
           {{ pendingCrossOff ? 'Crossing off...' : 'Confirm cross off' }}
+        </button>
+      </div>
+    </div>
+  </section>
+
+  <section *ngIf="showTransferModal" class="modal-backdrop" (click)="closeTransferModal()">
+    <div class="modal-card" role="dialog" aria-modal="true" (click)="$event.stopPropagation()">
+      <h2>Move or copy listing</h2>
+
+      <fieldset class="transfer-operation-group">
+        <label class="transfer-operation">
+          <input
+            type="radio"
+            name="transferOperation"
+            [checked]="transferOperation === 'copy'"
+            (change)="onTransferOperationChange('copy')"
+          />
+          Copy
+        </label>
+        <label class="transfer-operation">
+          <input
+            type="radio"
+            name="transferOperation"
+            [checked]="transferOperation === 'move'"
+            [disabled]="!canMoveFromCurrentList"
+            (change)="onTransferOperationChange('move')"
+          />
+          Move
+        </label>
+      </fieldset>
+      <p *ngIf="!canMoveFromCurrentList" class="helper-text">Move is unavailable from Main. You can still copy to another list.</p>
+
+      <label>
+        Destination list
+        <select [(ngModel)]="targetListSlug">
+          <option *ngFor="let list of filteredTransferTargetLists" [value]="list.slug">
+            {{ list.name }}
+          </option>
+        </select>
+      </label>
+      <p *ngIf="filteredTransferTargetLists.length === 0" class="modal-error">
+        No destination lists available. Create another custom list first.
+      </p>
+      <p *ngIf="transferModalError" class="modal-error">{{ transferModalError }}</p>
+
+      <div class="modal-actions">
+        <button type="button" class="ghost" (click)="closeTransferModal()">Cancel</button>
+        <button type="button" [disabled]="!canSubmitTransfer" (click)="confirmTransfer()">
+          {{
+            pendingTransfer
+              ? (transferOperation === 'move' ? 'Moving...' : 'Copying...')
+              : (transferOperation === 'move' ? 'Confirm move' : 'Confirm copy')
+          }}
         </button>
       </div>
     </div>
