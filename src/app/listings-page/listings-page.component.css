@@ -115,6 +115,15 @@ button.ghost {
   min-width: 130px;
 }
 
+.listing-side .cross-off {
+  background: #dc2626;
+}
+
+.listing-side .cross-off:disabled {
+  background: #fca5a5;
+  cursor: not-allowed;
+}
+
 .source {
   font-size: 0.85rem;
   color: #374151;

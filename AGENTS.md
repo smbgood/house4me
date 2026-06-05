@@ -44,9 +44,6 @@ ewail/
 │   │   └── success/            # Form Submit Sucess Page
 │   ├── assets/             # Favicon, logos, other site assets
 │   ├── environments/             # Environment specific angular config values
-├── cypress/                 # Cypress End to End Testing files
-│   ├── e2e/         # Cypress test script files to perform automated integration testing using a running dev environment on localhost:9999
-│   ├── support/     # Cypress test script support files
 ├── package.json
 ├── tsconfig.json
 ├── angular.json
@@ -194,7 +191,7 @@ services:
     Provide appropriate ARIA labels for buttons and form controls. Test
     screens with assistive technologies.
 
-    Testing – create end‑to‑end tests with Cypress. 
+    Testing – only perform linting and basic compilation to test
 
 ### Naming Conventions and Style
 
@@ -250,6 +247,6 @@ For local development, make code changes and allow the user to test
 
 Do not spend time/resources on performing unit testing
 
-Do create Cypress End-to-End tests to perform basic regression / functional validation
+Do not create Cypress End-to-End tests to perform basic regression / functional validation, instead compile files where appropriate but mostly rely on the user to test live
 
 Lint the code and perform whatever static analysis you wish to catch syntax errors, but do not spend resources to build or run the code, the user will perform that task

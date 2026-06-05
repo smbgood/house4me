@@ -32,6 +32,7 @@ export interface RentalListing {
   popularity?: unknown;
   raw_snippet?: string | null;
   raw_payload?: unknown;
+  is_crossed_off?: boolean;
   status: string;
   last_seen_at: string;
   created_at?: string;
@@ -53,6 +54,13 @@ export interface ListingsResponse {
 
 export interface ListingResponse {
   listing: RentalListing;
+}
+
+export interface ListingCrossOffResponse {
+  listing: {
+    id: string;
+    is_crossed_off: boolean;
+  };
 }
 
 @Injectable({
@@ -112,5 +120,25 @@ export class RentalListingsService {
     }
 
     return (await response.json()) as ListingResponse;
+  }
+
+  async crossOffListing(id: string): Promise<ListingCrossOffResponse> {
+    const url = `${environment.apiUrl}/cross-off-listing`;
+    const refreshToken = this.googleAuthService.getRefreshToken();
+    const headers: HeadersInit = {
+      'Content-Type': 'application/json',
+      ...(refreshToken ? { Authorization: `Bearer ${refreshToken}` } : {})
+    };
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ id, isCrossedOff: true })
+    });
+    if (!response.ok) {
+      throw new Error(`Failed to cross off listing (${response.status}).`);
+    }
+
+    return (await response.json()) as ListingCrossOffResponse;
   }
 }

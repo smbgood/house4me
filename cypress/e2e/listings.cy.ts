@@ -15,6 +15,7 @@ describe('Rental aggregator listing filters', () => {
       bathrooms: 2,
       allows_pets: true,
       has_fence: true,
+      is_crossed_off: false,
       status: 'active',
       last_seen_at: '2026-06-04T12:00:00.000Z'
     },
@@ -33,6 +34,7 @@ describe('Rental aggregator listing filters', () => {
       bathrooms: 1.5,
       allows_pets: false,
       has_fence: false,
+      is_crossed_off: false,
       status: 'active',
       last_seen_at: '2026-06-04T12:00:00.000Z'
     },
@@ -51,6 +53,7 @@ describe('Rental aggregator listing filters', () => {
       bathrooms: 2,
       allows_pets: true,
       has_fence: false,
+      is_crossed_off: false,
       status: 'active',
       last_seen_at: '2026-06-04T12:00:00.000Z'
     },
@@ -86,13 +89,19 @@ describe('Rental aggregator listing filters', () => {
         monthly_fees_text: 'Air Filter Delivery Fee: $10, Internet & Media: $85'
       },
       photo_count: 26,
+      is_crossed_off: false,
       status: 'active',
       last_seen_at: '2026-06-04T12:00:00.000Z'
     }
   ];
 
+  const crossedOffIds = new Set<string>();
+
   function filterListings(query: Record<string, string | number>): typeof listings {
     return listings.filter((listing) => {
+      if (crossedOffIds.has(listing.id)) {
+        return false;
+      }
       if (query['source'] && listing.source !== query['source']) {
         return false;
       }
@@ -134,6 +143,26 @@ describe('Rental aggregator listing filters', () => {
         }
       });
     }).as('getListings');
+
+    cy.intercept('POST', 'http://localhost:9999/.netlify/functions/cross-off-listing', (req) => {
+      expect(req.headers).to.have.property('authorization');
+      const id = String((req.body as { id?: string })?.id ?? '');
+      const listing = listings.find((item) => item.id === id);
+      if (!listing) {
+        req.reply({ statusCode: 404, body: { error: 'Listing not found.' } });
+        return;
+      }
+      crossedOffIds.add(id);
+      req.reply({
+        statusCode: 200,
+        body: {
+          listing: {
+            id,
+            is_crossed_off: true
+          }
+        }
+      });
+    }).as('crossOffListing');
 
     cy.intercept('GET', 'http://localhost:9999/.netlify/functions/get-listing*', (req) => {
       expect(req.headers).to.have.property('authorization');
@@ -179,6 +208,11 @@ describe('Rental aggregator listing filters', () => {
     cy.get('select').eq(0).select('All');
     cy.contains('button', 'Apply filters').click();
     cy.wait('@getListings');
+    cy.contains('article', 'Blue Ranch').within(() => {
+      cy.contains('button', 'Cross off').click();
+    });
+    cy.wait('@crossOffListing');
+    cy.contains('Blue Ranch').should('not.exist');
     cy.contains('a', 'Maple Family Home').click();
     cy.wait('@getListing');
     cy.url().should('include', '/listings/4');

@@ -104,9 +104,10 @@ export const handler: Handler = async (event) => {
   let query = supabaseAdmin
     .from('rental_listings')
     .select(
-      'id, source, listing_url, image_url, title, address, city, state, zip, rent_price, bedrooms, bathrooms, allows_pets, has_fence, available_date, sqft, management_company, landlord_name, photo_count, status, last_seen_at'
+      'id, source, listing_url, image_url, title, address, city, state, zip, rent_price, bedrooms, bathrooms, allows_pets, has_fence, available_date, sqft, management_company, landlord_name, photo_count, is_crossed_off, status, last_seen_at'
     )
     .eq('status', 'active')
+    .eq('is_crossed_off', false)
     .order('last_seen_at', { ascending: false })
     .limit(250);
 

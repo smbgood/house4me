@@ -78,6 +78,14 @@
       <div class="listing-side">
         <span class="source">{{ listing.source | titlecase }}</span>
         <a [href]="listing.listing_url" target="_blank" rel="noopener noreferrer">Open listing</a>
+        <button
+          type="button"
+          class="cross-off"
+          [disabled]="pendingCrossOffIds.has(listing.id)"
+          (click)="crossOffListing(listing.id)"
+        >
+          {{ pendingCrossOffIds.has(listing.id) ? 'Crossing off...' : 'Cross off' }}
+        </button>
       </div>
     </article>
 

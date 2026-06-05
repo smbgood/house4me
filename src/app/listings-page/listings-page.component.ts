@@ -22,6 +22,7 @@ export class ListingsPageComponent implements OnInit {
   listings: RentalListing[] = [];
   loading = false;
   error = '';
+  pendingCrossOffIds = new Set<string>();
 
   source = '';
   pets: SelectBool = '';
@@ -52,6 +53,23 @@ export class ListingsPageComponent implements OnInit {
 
   trackById(_: number, item: RentalListing): string {
     return item.id;
+  }
+
+  async crossOffListing(id: string): Promise<void> {
+    if (this.pendingCrossOffIds.has(id)) {
+      return;
+    }
+
+    this.pendingCrossOffIds.add(id);
+    this.error = '';
+    try {
+      await this.rentalListingsService.crossOffListing(id);
+      this.listings = this.listings.filter((listing) => listing.id !== id);
+    } catch (error) {
+      this.error = error instanceof Error ? error.message : 'Failed to cross off listing.';
+    } finally {
+      this.pendingCrossOffIds.delete(id);
+    }
   }
 
   private async load(): Promise<void> {
