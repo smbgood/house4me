@@ -14,7 +14,7 @@ const LISTS_STORAGE_KEY = 'selectedImportListSlug';
 let currentSource = null;
 let currentLists = [{ slug: MAIN_LIST_SLUG, name: 'Main' }];
 let selectedListSlug = MAIN_LIST_SLUG;
-let activeForRentJob = null;
+let activeEnrichmentJob = null;
 
 function setStatus(message) {
   statusEl.textContent = message;
@@ -282,7 +282,7 @@ Rejected: ${payload.rejected ?? '?'}`
   }
 
   const enrichmentText =
-    source === 'forrent' && enrichmentSummary
+    (source === 'forrent' || source === 'trulia') && enrichmentSummary
       ? `
 Enriched: ${enrichmentSummary.succeeded ?? '?'} / ${enrichmentSummary.attempted ?? '?'}
 Enrich Failed: ${enrichmentSummary.failed ?? '?'}
@@ -307,9 +307,10 @@ Ingest w/o Amenities: ${payload.amenityDiagnostics.withoutAmenityTags ?? '?'}`
 }
 
 async function scanCurrentPage() {
-  if (activeForRentJob) {
-    setStatus(`ForRent enrichment is already running.
-Progress: ${activeForRentJob.completed}/${activeForRentJob.total}`);
+  if (activeEnrichmentJob) {
+    const sourceLabel = activeEnrichmentJob.source === 'forrent' ? 'ForRent' : 'Trulia';
+    setStatus(`${sourceLabel} enrichment is already running.
+Progress: ${activeEnrichmentJob.completed}/${activeEnrichmentJob.total}`);
     return;
   }
 
@@ -363,7 +364,7 @@ Progress: ${activeForRentJob.completed}/${activeForRentJob.total}`);
     const selectedList = currentLists.find((list) => list.slug === selectedSlug);
     const selectedListLabel = selectedList?.name ?? 'Main';
 
-    if (source !== 'forrent') {
+    if (source !== 'forrent' && source !== 'trulia') {
       await ingestListings({
         source,
         listings: scanResult.listings,
@@ -375,28 +376,30 @@ Progress: ${activeForRentJob.completed}/${activeForRentJob.total}`);
       return;
     }
 
-    const requestedJobId = `forrent-job-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    setStatus(`Found ${scanResult.listings.length} ForRent listings.
+    const isForRent = source === 'forrent';
+    const sourceLabel = isForRent ? 'ForRent' : 'Trulia';
+    const requestedJobId = `${source}-job-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    setStatus(`Found ${scanResult.listings.length} ${sourceLabel} listings.
 Starting detail enrichment in background...`);
 
     let startResult;
     try {
       startResult = await browser.tabs.sendMessage(tab.id, {
-        type: 'START_FORRENT_ENRICHMENT',
+        type: isForRent ? 'START_FORRENT_ENRICHMENT' : 'START_TRULIA_ENRICHMENT',
         jobId: requestedJobId,
         listings: scanResult.listings
       });
     } catch (error) {
-      setStatus(`Failed to start ForRent enrichment: ${String(error)}`);
+      setStatus(`Failed to start ${sourceLabel} enrichment: ${String(error)}`);
       return;
     }
 
     if (!startResult?.ok) {
-      setStatus(`Unable to start ForRent enrichment: ${startResult?.error ?? 'Unknown error'}`);
+      setStatus(`Unable to start ${sourceLabel} enrichment: ${startResult?.error ?? 'Unknown error'}`);
       return;
     }
 
-    activeForRentJob = {
+    activeEnrichmentJob = {
       jobId: startResult.jobId,
       tabId: tab.id,
       source,
@@ -407,11 +410,11 @@ Starting detail enrichment in background...`);
       completed: 0
     };
     scanButton.disabled = true;
-    setStatus(`Scanning ForRent page and enriching detail pages...
-Progress: 0/${activeForRentJob.total}
+    setStatus(`Scanning ${sourceLabel} page and enriching detail pages...
+Progress: 0/${activeEnrichmentJob.total}
 Rate limit: 1 request every 3000 ms`);
   } finally {
-    if (!activeForRentJob) {
+    if (!activeEnrichmentJob) {
       scanButton.disabled = false;
     }
   }
@@ -421,56 +424,61 @@ browser.runtime.onMessage.addListener((message) => {
   if (!message) {
     return;
   }
-  if (!activeForRentJob && message.type !== 'FORRENT_ENRICH_STARTED') {
+  const startTypes = new Set(['FORRENT_ENRICH_STARTED', 'TRULIA_ENRICH_STARTED']);
+  if (!activeEnrichmentJob && !startTypes.has(message.type)) {
     return;
   }
 
-  if (message.type === 'FORRENT_ENRICH_STARTED') {
-    if (!activeForRentJob || message.jobId !== activeForRentJob.jobId) {
+  if (message.type === 'FORRENT_ENRICH_STARTED' || message.type === 'TRULIA_ENRICH_STARTED') {
+    if (!activeEnrichmentJob || message.jobId !== activeEnrichmentJob.jobId) {
       return;
     }
-    const total = Number.isFinite(message.total) ? message.total : activeForRentJob.total;
-    activeForRentJob.total = total;
-    setStatus(`Scanning ForRent page and enriching detail pages...
+    const sourceLabel = activeEnrichmentJob.source === 'forrent' ? 'ForRent' : 'Trulia';
+    const total = Number.isFinite(message.total) ? message.total : activeEnrichmentJob.total;
+    activeEnrichmentJob.total = total;
+    setStatus(`Scanning ${sourceLabel} page and enriching detail pages...
 Progress: 0/${total}
 Rate limit: 1 request every 3000 ms`);
     return;
   }
 
-  if (message.type === 'FORRENT_ENRICH_PROGRESS') {
-    if (!activeForRentJob || message.jobId !== activeForRentJob.jobId) {
+  if (message.type === 'FORRENT_ENRICH_PROGRESS' || message.type === 'TRULIA_ENRICH_PROGRESS') {
+    if (!activeEnrichmentJob || message.jobId !== activeEnrichmentJob.jobId) {
       return;
     }
+    const sourceLabel = activeEnrichmentJob.source === 'forrent' ? 'ForRent' : 'Trulia';
     const completed = Number.isFinite(message.completed) ? message.completed : 0;
-    const total = Number.isFinite(message.total) ? message.total : activeForRentJob.total;
-    activeForRentJob.completed = completed;
-    activeForRentJob.total = total;
-    setStatus(`Scanning ForRent page and enriching detail pages...
+    const total = Number.isFinite(message.total) ? message.total : activeEnrichmentJob.total;
+    activeEnrichmentJob.completed = completed;
+    activeEnrichmentJob.total = total;
+    setStatus(`Scanning ${sourceLabel} page and enriching detail pages...
 Progress: ${completed}/${total}
 Rate limit: 1 request every 3000 ms`);
     return;
   }
 
-  if (message.type === 'FORRENT_ENRICH_ERROR') {
-    if (!activeForRentJob || message.jobId !== activeForRentJob.jobId) {
+  if (message.type === 'FORRENT_ENRICH_ERROR' || message.type === 'TRULIA_ENRICH_ERROR') {
+    if (!activeEnrichmentJob || message.jobId !== activeEnrichmentJob.jobId) {
       return;
     }
-    activeForRentJob = null;
+    const sourceLabel = activeEnrichmentJob.source === 'forrent' ? 'ForRent' : 'Trulia';
+    activeEnrichmentJob = null;
     scanButton.disabled = false;
-    setStatus(`ForRent enrichment failed: ${message.error ?? 'Unknown error'}`);
+    setStatus(`${sourceLabel} enrichment failed: ${message.error ?? 'Unknown error'}`);
     return;
   }
 
-  if (message.type !== 'FORRENT_ENRICH_COMPLETE') {
+  if (message.type !== 'FORRENT_ENRICH_COMPLETE' && message.type !== 'TRULIA_ENRICH_COMPLETE') {
     return;
   }
-  if (!activeForRentJob || message.jobId !== activeForRentJob.jobId) {
+  if (!activeEnrichmentJob || message.jobId !== activeEnrichmentJob.jobId) {
     return;
   }
 
-  const finishedJob = activeForRentJob;
-  activeForRentJob = null;
-  setStatus(`ForRent enrichment complete.
+  const sourceLabel = activeEnrichmentJob.source === 'forrent' ? 'ForRent' : 'Trulia';
+  const finishedJob = activeEnrichmentJob;
+  activeEnrichmentJob = null;
+  setStatus(`${sourceLabel} enrichment complete.
 Preparing ingest request...`);
   void ingestListings({
     source: finishedJob.source,

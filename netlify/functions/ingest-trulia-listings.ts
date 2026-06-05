@@ -15,6 +15,25 @@ interface IngestBody {
   listSlug?: unknown;
 }
 
+function parseDateOnly(value: unknown): string | undefined {
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+  const trimmed = value.trim();
+  const match = trimmed.match(/^(\d{4}-\d{2}-\d{2})$/);
+  return match ? match[1] : undefined;
+}
+
+function parseTags(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+  const tags = value
+    .map((item) => (typeof item === 'string' ? item.trim() : ''))
+    .filter((item) => item.length > 0);
+  return tags.length > 0 ? tags : undefined;
+}
+
 function getBearerToken(headers: Record<string, string | undefined>): string | null {
   const value = headers['authorization'] ?? headers['Authorization'];
   if (!value) {
@@ -32,6 +51,7 @@ function normalizeIncomingListing(input: unknown): NormalizedListingInput | null
   const candidate = input as {
     listingUrl?: unknown;
     sourceListingId?: unknown;
+    sourcePropertyId?: unknown;
     imageUrl?: unknown;
     title?: unknown;
     address?: unknown;
@@ -43,6 +63,16 @@ function normalizeIncomingListing(input: unknown): NormalizedListingInput | null
     bathrooms?: unknown;
     allowsPets?: unknown;
     hasFence?: unknown;
+    availableDate?: unknown;
+    sqft?: unknown;
+    descriptionText?: unknown;
+    managementCompany?: unknown;
+    landlordName?: unknown;
+    photoCount?: unknown;
+    tags?: unknown;
+    listingDetails?: unknown;
+    fees?: unknown;
+    popularity?: unknown;
     rawSnippet?: unknown;
     rawPayload?: unknown;
   };
@@ -62,6 +92,7 @@ function normalizeIncomingListing(input: unknown): NormalizedListingInput | null
   return {
     source: 'trulia',
     sourceListingId: typeof candidate.sourceListingId === 'string' ? candidate.sourceListingId : undefined,
+    sourcePropertyId: typeof candidate.sourcePropertyId === 'string' ? candidate.sourcePropertyId : undefined,
     listingUrl,
     imageUrl: toAbsoluteUrl(typeof candidate.imageUrl === 'string' ? candidate.imageUrl : undefined, TRULIA_BASE_URL),
     title: typeof candidate.title === 'string' ? candidate.title : undefined,
@@ -74,6 +105,16 @@ function normalizeIncomingListing(input: unknown): NormalizedListingInput | null
     bathrooms: parseNumber(candidate.bathrooms),
     allowsPets: typeof candidate.allowsPets === 'boolean' ? candidate.allowsPets : inferPetsValue(sourceText),
     hasFence: typeof candidate.hasFence === 'boolean' ? candidate.hasFence : inferFenceValue(sourceText),
+    availableDate: parseDateOnly(candidate.availableDate),
+    sqft: parseNumber(candidate.sqft),
+    descriptionText: typeof candidate.descriptionText === 'string' ? candidate.descriptionText : undefined,
+    managementCompany: typeof candidate.managementCompany === 'string' ? candidate.managementCompany : undefined,
+    landlordName: typeof candidate.landlordName === 'string' ? candidate.landlordName : undefined,
+    photoCount: parseNumber(candidate.photoCount),
+    tags: parseTags(candidate.tags),
+    listingDetails: candidate.listingDetails ?? undefined,
+    fees: candidate.fees ?? undefined,
+    popularity: candidate.popularity ?? undefined,
     rawSnippet: typeof candidate.rawSnippet === 'string' ? candidate.rawSnippet : undefined,
     rawPayload: candidate.rawPayload ?? input
   };

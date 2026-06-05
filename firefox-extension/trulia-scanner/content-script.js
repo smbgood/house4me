@@ -10,11 +10,19 @@ const FORRENT_BRIDGE_REQUEST_TYPE = 'HOUSE4ME_FORRENT_ENRICH_REQUEST';
 const FORRENT_BRIDGE_RESPONSE_TYPE = 'HOUSE4ME_FORRENT_ENRICH_RESPONSE';
 const FORRENT_BRIDGE_PROGRESS_TYPE = 'HOUSE4ME_FORRENT_ENRICH_PROGRESS';
 const FORRENT_BRIDGE_SCRIPT_ID = 'house4me-forrent-enrichment-bridge';
+const TRULIA_BRIDGE_REQUEST_TYPE = 'HOUSE4ME_TRULIA_ENRICH_REQUEST';
+const TRULIA_BRIDGE_RESPONSE_TYPE = 'HOUSE4ME_TRULIA_ENRICH_RESPONSE';
+const TRULIA_BRIDGE_PROGRESS_TYPE = 'HOUSE4ME_TRULIA_ENRICH_PROGRESS';
+const TRULIA_BRIDGE_SCRIPT_ID = 'house4me-trulia-enrichment-bridge';
 const FORRENT_DETAIL_DELAY_MS = 3000;
 const FORRENT_DETAIL_TIMEOUT_MS = 15000;
 const FORRENT_ENRICHMENT_TIMEOUT_BUFFER_MS = 30000;
+const TRULIA_DETAIL_DELAY_MS = 3000;
+const TRULIA_DETAIL_TIMEOUT_MS = 15000;
+const TRULIA_ENRICHMENT_TIMEOUT_BUFFER_MS = 30000;
 
 let activeForRentJobId = null;
+let activeTruliaJobId = null;
 
 function isObject(value) {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
@@ -89,13 +97,63 @@ function mergeForRentListingDetails(listing, detail) {
   };
 }
 
+function mergeTruliaListingDetails(listing, detail) {
+  if (!detail || typeof detail !== 'object') {
+    return listing;
+  }
+
+  return {
+    ...listing,
+    sourcePropertyId: typeof detail.sourcePropertyId === 'string' ? detail.sourcePropertyId : listing.sourcePropertyId ?? null,
+    address: detail.address || listing.address || null,
+    city: detail.city || listing.city || null,
+    state: detail.state || listing.state || null,
+    zip: detail.zip || listing.zip || null,
+    rentPrice: Number.isFinite(detail.rentPrice) ? detail.rentPrice : listing.rentPrice ?? null,
+    bedrooms: Number.isFinite(detail.bedrooms) ? detail.bedrooms : listing.bedrooms ?? null,
+    bathrooms: Number.isFinite(detail.bathrooms) ? detail.bathrooms : listing.bathrooms ?? null,
+    allowsPets: typeof detail.allowsPets === 'boolean' ? detail.allowsPets : listing.allowsPets ?? null,
+    hasFence: typeof detail.hasFence === 'boolean' ? detail.hasFence : listing.hasFence ?? null,
+    availableDate: typeof detail.availableDate === 'string' ? detail.availableDate : listing.availableDate ?? null,
+    sqft: Number.isFinite(detail.sqft) ? detail.sqft : listing.sqft ?? null,
+    descriptionText: typeof detail.descriptionText === 'string' ? detail.descriptionText : listing.descriptionText ?? null,
+    managementCompany:
+      typeof detail.managementCompany === 'string' ? detail.managementCompany : listing.managementCompany ?? null,
+    landlordName: typeof detail.landlordName === 'string' ? detail.landlordName : listing.landlordName ?? null,
+    photoCount: Number.isFinite(detail.photoCount) ? detail.photoCount : listing.photoCount ?? null,
+    tags: Array.isArray(detail.tags) ? detail.tags : listing.tags ?? null,
+    listingDetails: Array.isArray(detail.listingDetails) ? detail.listingDetails : listing.listingDetails ?? null,
+    fees: isObject(detail.fees) ? detail.fees : listing.fees ?? null,
+    popularity: isObject(detail.popularity) ? detail.popularity : listing.popularity ?? null,
+    rawPayload: {
+      ...(isObject(listing.rawPayload) ? listing.rawPayload : {}),
+      detailFetched: detail.detailFetchStatus === 'success',
+      detailFetchStatus: detail.detailFetchStatus ?? 'unknown',
+      detailFetchError: detail.detailFetchError ?? null,
+      detailParserSource: detail.detailParserSource ?? null,
+      amenityExtractionDebug: isObject(detail.amenityExtractionDebug) ? detail.amenityExtractionDebug : null,
+      detailFetchedAt: new Date().toISOString()
+    }
+  };
+}
+
 function createForRentEnrichmentRequestId() {
   return `forrent-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function createTruliaEnrichmentRequestId() {
+  return `trulia-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
 function calculateForRentEnrichmentTimeoutMs(totalListings) {
   const safeTotal = Number.isFinite(totalListings) ? Math.max(0, totalListings) : 0;
   const expectedMs = safeTotal * (FORRENT_DETAIL_DELAY_MS + FORRENT_DETAIL_TIMEOUT_MS) + FORRENT_ENRICHMENT_TIMEOUT_BUFFER_MS;
+  return Math.max(120000, expectedMs);
+}
+
+function calculateTruliaEnrichmentTimeoutMs(totalListings) {
+  const safeTotal = Number.isFinite(totalListings) ? Math.max(0, totalListings) : 0;
+  const expectedMs = safeTotal * (TRULIA_DETAIL_DELAY_MS + TRULIA_DETAIL_TIMEOUT_MS) + TRULIA_ENRICHMENT_TIMEOUT_BUFFER_MS;
   return Math.max(120000, expectedMs);
 }
 
@@ -871,6 +929,552 @@ function startForRentEnrichmentJob(jobId, listings) {
     });
 }
 
+function ensureTruliaEnrichmentBridgeInstalled() {
+  if (document.getElementById(TRULIA_BRIDGE_SCRIPT_ID)) {
+    return;
+  }
+
+  function installBridge() {
+    if (window.__house4meTruliaBridgeInstalled) {
+      return;
+    }
+    window.__house4meTruliaBridgeInstalled = true;
+
+    function normalize(value) {
+      return (value ?? '').replace(/\s+/g, ' ').trim();
+    }
+
+    function parseJsonSafely(raw) {
+      try {
+        return JSON.parse(raw);
+      } catch {
+        return null;
+      }
+    }
+
+    function toNumber(value) {
+      if (typeof value === 'number' && Number.isFinite(value)) {
+        return value;
+      }
+      if (typeof value === 'string') {
+        const parsed = Number.parseFloat(value.replace(/[^\d.]/g, ''));
+        return Number.isFinite(parsed) ? parsed : null;
+      }
+      return null;
+    }
+
+    function toInteger(value) {
+      const parsed = toNumber(value);
+      return Number.isFinite(parsed) ? Math.round(parsed) : null;
+    }
+
+    function firstString(...values) {
+      for (const value of values) {
+        if (typeof value === 'string') {
+          const normalized = normalize(value);
+          if (normalized) {
+            return normalized;
+          }
+        }
+      }
+      return null;
+    }
+
+    function firstNumber(...values) {
+      for (const value of values) {
+        const parsed = toNumber(value);
+        if (Number.isFinite(parsed)) {
+          return parsed;
+        }
+      }
+      return null;
+    }
+
+    function flattenStructuredData(value) {
+      if (!value) {
+        return [];
+      }
+      if (Array.isArray(value)) {
+        return value.flatMap((item) => flattenStructuredData(item));
+      }
+      if (typeof value !== 'object') {
+        return [];
+      }
+      const objectValue = value;
+      const graph = objectValue['@graph'];
+      if (Array.isArray(graph)) {
+        return [objectValue, ...graph.flatMap((item) => flattenStructuredData(item))];
+      }
+      return [objectValue];
+    }
+
+    function extractHomeHighlights(doc) {
+      const container = doc.querySelector('[data-testid="home-highlights-container"]');
+      const values = [];
+      if (!container) {
+        return values;
+      }
+      container.querySelectorAll('.media-block').forEach((row) => {
+        const textNodes = [...row.querySelectorAll('.d_block')].map((item) => normalize(item.textContent)).filter(Boolean);
+        if (textNodes.length >= 2) {
+          values.push(`${textNodes[0]}: ${textNodes[1]}`);
+        }
+      });
+      return [...new Set(values)];
+    }
+
+    function extractFeatureRows(doc) {
+      const container = doc.querySelector('[data-testid="features-container"]');
+      if (!container) {
+        return [];
+      }
+
+      const rows = [];
+      const usedText = new Set();
+      const seenCategories = new Set();
+
+      container.querySelectorAll('h2, h3, h4, h5').forEach((heading) => {
+        const category = normalize(heading.textContent);
+        if (!category) {
+          return;
+        }
+        const scope = heading.closest('section, article, [data-testid*="section"], [class*="section"]') ?? heading.parentElement;
+        if (!scope) {
+          return;
+        }
+        const values = new Set();
+        scope.querySelectorAll('li').forEach((item) => {
+          const value = normalize(item.textContent);
+          if (value && value !== category) {
+            values.add(value);
+            usedText.add(value);
+          }
+        });
+        scope.querySelectorAll('dt').forEach((term) => {
+          const label = normalize(term.textContent);
+          const value = normalize(term.nextElementSibling ? term.nextElementSibling.textContent : '');
+          if (label && value) {
+            values.add(`${label}: ${value}`);
+            usedText.add(`${label}: ${value}`);
+          }
+        });
+        if (values.size > 0 && !seenCategories.has(category)) {
+          seenCategories.add(category);
+          rows.push({
+            category,
+            parent_category: 'Features',
+            text: [...values]
+          });
+        }
+      });
+
+      const detailPairs = new Set();
+      container.querySelectorAll('dl').forEach((list) => {
+        list.querySelectorAll('dt').forEach((term) => {
+          const label = normalize(term.textContent);
+          const value = normalize(term.nextElementSibling ? term.nextElementSibling.textContent : '');
+          if (label && value) {
+            const pair = `${label}: ${value}`;
+            if (!usedText.has(pair)) {
+              detailPairs.add(pair);
+            }
+          }
+        });
+      });
+      if (detailPairs.size > 0) {
+        rows.push({
+          category: 'Property Details',
+          parent_category: 'Features',
+          text: [...detailPairs]
+        });
+      }
+
+      return rows;
+    }
+
+    function parseTruliaDetail(htmlText, listingUrl) {
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(htmlText, 'text/html');
+      const bodyText = normalize(doc.body ? doc.body.innerText : '');
+      const structuredData = [];
+      doc.querySelectorAll('script[type="application/ld+json"]').forEach((script) => {
+        const parsed = parseJsonSafely(script.textContent || '');
+        flattenStructuredData(parsed).forEach((entry) => structuredData.push(entry));
+      });
+
+      const listingEntity =
+        structuredData.find((entry) => {
+          const typeValue = entry && typeof entry === 'object' ? entry['@type'] : null;
+          if (typeof typeValue === 'string') {
+            return /apartment|residence|house|product|accommodation|realestate/i.test(typeValue);
+          }
+          if (Array.isArray(typeValue)) {
+            return typeValue.some((value) => /apartment|residence|house|product|accommodation|realestate/i.test(String(value)));
+          }
+          return false;
+        }) ?? {};
+
+      const listingAddress = listingEntity.address && typeof listingEntity.address === 'object' ? listingEntity.address : {};
+      const listingOffers = listingEntity.offers && typeof listingEntity.offers === 'object' ? listingEntity.offers : {};
+      const description =
+        firstString(
+          listingEntity.description,
+          doc.querySelector('meta[name="description"]')?.getAttribute('content'),
+          doc.querySelector('[data-testid*="description"]')?.textContent
+        ) ?? null;
+
+      const homeHighlights = extractHomeHighlights(doc);
+      const featureRows = extractFeatureRows(doc);
+      const listingDetails = [];
+      if (homeHighlights.length > 0) {
+        listingDetails.push({
+          category: 'Home Highlights',
+          parent_category: 'Amenities',
+          text: homeHighlights
+        });
+      }
+      featureRows.forEach((row) => listingDetails.push(row));
+
+      const lowSignalText = /contact manager|ask manager|request tour|apply now/i;
+      const tags = [
+        ...new Set(
+          listingDetails
+            .flatMap((row) => row.text || [])
+            .map((item) => normalize(item))
+            .filter((item) => item && !lowSignalText.test(item))
+            .slice(0, 40)
+        )
+      ];
+
+      const bedsFromText = bodyText.match(/(\d+(?:\.\d+)?)\s*(?:bed|beds|bedroom|bedrooms)\b/i);
+      const bathsFromText = bodyText.match(/(\d+(?:\.\d+)?)\s*(?:bath|baths|bathroom|bathrooms)\b/i);
+      const sqftFromText = bodyText.match(/(\d[\d,]*)\s*(?:sq\.?\s*ft|square feet)\b/i);
+      const sourcePropertyId =
+        firstString(
+          typeof listingEntity.identifier === 'string' ? listingEntity.identifier : null,
+          doc.querySelector('meta[property="og:url"]')?.getAttribute('content')?.match(/\/(\d+)(?:[/?#_-]|$)/)?.[1],
+          listingUrl.match(/\/(\d+)(?:[/?#_-]|$)/)?.[1]
+        ) ?? null;
+
+      const allowsPets = /\bpet(?:s)?\s*(?:friendly|allowed|welcome)\b/i.test(bodyText)
+        ? true
+        : /\bno pets\b/i.test(bodyText)
+          ? false
+          : null;
+      const hasFence = /\bfenc(?:e|ed|ing)\b/i.test(bodyText) ? true : null;
+      const imageValue = listingEntity.image;
+      const photoCount = Array.isArray(imageValue) ? imageValue.length : imageValue ? 1 : null;
+
+      return {
+        sourcePropertyId,
+        address: firstString(
+          listingAddress.streetAddress,
+          doc.querySelector('[data-testid*="address"]')?.textContent,
+          doc.querySelector('meta[property="og:title"]')?.getAttribute('content')?.split('|')[0]
+        ),
+        city: firstString(listingAddress.addressLocality),
+        state: firstString(listingAddress.addressRegion),
+        zip: firstString(listingAddress.postalCode),
+        rentPrice: firstNumber(listingOffers.price, listingEntity.price, bodyText.match(/\$\s?([\d,]+)/)?.[1]),
+        bedrooms: firstNumber(listingEntity.numberOfRooms, bedsFromText ? bedsFromText[1] : null),
+        bathrooms: firstNumber(listingEntity.numberOfBathroomsTotal, bathsFromText ? bathsFromText[1] : null),
+        allowsPets,
+        hasFence,
+        availableDate: null,
+        sqft: toInteger(
+          listingEntity.floorSize && typeof listingEntity.floorSize === 'object'
+            ? listingEntity.floorSize.value
+            : listingEntity.floorSize || (sqftFromText ? sqftFromText[1] : null)
+        ),
+        descriptionText: description,
+        managementCompany: firstString(
+          listingEntity.brand && typeof listingEntity.brand === 'object' ? listingEntity.brand.name : null,
+          listingEntity.provider && typeof listingEntity.provider === 'object' ? listingEntity.provider.name : null
+        ),
+        landlordName: firstString(
+          listingEntity.seller && typeof listingEntity.seller === 'object' ? listingEntity.seller.name : null
+        ),
+        photoCount: toInteger(photoCount),
+        tags: tags.length > 0 ? tags : null,
+        listingDetails: listingDetails.length > 0 ? listingDetails : null,
+        fees: null,
+        popularity: null,
+        detailParserSource: structuredData.length > 0 ? 'structured-data+dom' : 'dom',
+        amenityExtractionDebug: {
+          homeHighlightCount: homeHighlights.length,
+          featureRowCount: featureRows.length,
+          listingDetailRowCount: listingDetails.length,
+          totalAmenityTags: tags.length,
+          hasFeaturesContainer: Boolean(doc.querySelector('[data-testid="features-container"]')),
+          hasHomeHighlightsContainer: Boolean(doc.querySelector('[data-testid="home-highlights-container"]'))
+        },
+        detailFetchStatus: 'success',
+        detailFetchError: null,
+        listingUrl
+      };
+    }
+
+    async function fetchDetailWithTimeout(url, timeoutMs) {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+      try {
+        const response = await fetch(url, {
+          method: 'GET',
+          credentials: 'include',
+          signal: controller.signal
+        });
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+        return await response.text();
+      } finally {
+        clearTimeout(timeoutId);
+      }
+    }
+
+    async function enrichListingUrls(listingUrls, requestId) {
+      const detailByUrl = {};
+      const total = listingUrls.length;
+      let completed = 0;
+
+      function delay(ms) {
+        return new Promise((resolve) => {
+          setTimeout(resolve, ms);
+        });
+      }
+
+      for (let index = 0; index < listingUrls.length; index += 1) {
+        const listingUrl = listingUrls[index];
+        let detailResult;
+        try {
+          const htmlText = await fetchDetailWithTimeout(listingUrl, TRULIA_DETAIL_TIMEOUT_MS);
+          detailResult = parseTruliaDetail(htmlText, listingUrl);
+        } catch (error) {
+          detailResult = {
+            listingUrl,
+            detailFetchStatus: error && error.name === 'AbortError' ? 'timeout' : 'error',
+            detailFetchError: error instanceof Error ? error.message : String(error || 'Detail fetch failed')
+          };
+        }
+
+        detailByUrl[listingUrl] = detailResult;
+        completed += 1;
+        window.postMessage(
+          {
+            type: TRULIA_BRIDGE_PROGRESS_TYPE,
+            requestId,
+            completed,
+            total,
+            listingUrl,
+            detailFetchStatus: detailResult.detailFetchStatus || 'unknown'
+          },
+          window.location.origin
+        );
+
+        if (index < listingUrls.length - 1) {
+          await delay(TRULIA_DETAIL_DELAY_MS);
+        }
+      }
+
+      return detailByUrl;
+    }
+
+    window.addEventListener('message', async (event) => {
+      if (event.source !== window) {
+        return;
+      }
+      const data = event.data;
+      if (!data || data.type !== TRULIA_BRIDGE_REQUEST_TYPE) {
+        return;
+      }
+
+      const requestId = typeof data.requestId === 'string' ? data.requestId : '';
+      const listingUrls = Array.isArray(data.listingUrls)
+        ? data.listingUrls.filter((entry) => typeof entry === 'string' && /^https?:\/\//i.test(entry))
+        : [];
+
+      const detailByUrl = await enrichListingUrls(listingUrls, requestId);
+      window.postMessage(
+        {
+          type: TRULIA_BRIDGE_RESPONSE_TYPE,
+          requestId,
+          detailByUrl
+        },
+        window.location.origin
+      );
+    });
+  }
+
+  const script = document.createElement('script');
+  script.id = TRULIA_BRIDGE_SCRIPT_ID;
+  script.textContent = `(${installBridge.toString()})();`;
+  (document.head || document.documentElement || document.body).appendChild(script);
+  script.remove();
+}
+
+function enrichTruliaListingsViaScriptlet(listings, options = {}) {
+  if (!Array.isArray(listings) || listings.length === 0) {
+    return Promise.resolve({
+      listings: [],
+      enrichment: {
+        attempted: 0,
+        succeeded: 0,
+        failed: 0
+      }
+    });
+  }
+
+  ensureTruliaEnrichmentBridgeInstalled();
+
+  const requestId = typeof options.requestId === 'string' && options.requestId ? options.requestId : createTruliaEnrichmentRequestId();
+  const dedupedUrls = [...new Set(listings.map((listing) => listing?.listingUrl).filter((url) => typeof url === 'string'))];
+  const timeoutMs = calculateTruliaEnrichmentTimeoutMs(dedupedUrls.length);
+
+  return new Promise((resolve) => {
+    let timeoutId = null;
+
+    function finalize(detailByUrl) {
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+      window.removeEventListener('message', handleWindowMessage);
+      const mergedListings = listings.map((listing) => mergeTruliaListingDetails(listing, detailByUrl[listing.listingUrl]));
+      const statuses = Object.values(detailByUrl).map((entry) =>
+        entry && typeof entry === 'object' ? entry.detailFetchStatus : null
+      );
+      const succeeded = statuses.filter((status) => status === 'success').length;
+      const amenityDiagnostics = mergedListings.reduce(
+        (summary, listing) => {
+          const debug = listing.rawPayload?.amenityExtractionDebug;
+          if (debug && debug.totalAmenityTags > 0) {
+            summary.withAmenities += 1;
+          } else {
+            summary.withoutAmenities += 1;
+          }
+          return summary;
+        },
+        { withAmenities: 0, withoutAmenities: 0 }
+      );
+      resolve({
+        listings: mergedListings,
+        enrichment: {
+          attempted: dedupedUrls.length,
+          succeeded,
+          failed: dedupedUrls.length - succeeded,
+          amenityDiagnostics
+        }
+      });
+    }
+
+    function handleWindowMessage(event) {
+      if (event.source !== window) {
+        return;
+      }
+      const data = event.data;
+      if (!data || data.requestId !== requestId) {
+        return;
+      }
+      if (data.type === TRULIA_BRIDGE_PROGRESS_TYPE) {
+        const progressCompleted = Number.isFinite(data.completed) ? data.completed : 0;
+        const progressTotal = Number.isFinite(data.total) ? data.total : dedupedUrls.length;
+        if (typeof options.onProgress === 'function') {
+          options.onProgress({
+            completed: progressCompleted,
+            total: progressTotal,
+            listingUrl: typeof data.listingUrl === 'string' ? data.listingUrl : null,
+            detailFetchStatus: typeof data.detailFetchStatus === 'string' ? data.detailFetchStatus : 'unknown'
+          });
+        }
+        if (!options.suppressRuntimeProgress) {
+          safeSendRuntimeMessage({
+            type: 'TRULIA_ENRICH_PROGRESS',
+            requestId,
+            completed: progressCompleted,
+            total: progressTotal
+          });
+        }
+        return;
+      }
+      if (data.type === TRULIA_BRIDGE_RESPONSE_TYPE) {
+        const detailByUrl = isObject(data.detailByUrl) ? data.detailByUrl : {};
+        finalize(detailByUrl);
+      }
+    }
+
+    window.addEventListener('message', handleWindowMessage);
+    timeoutId = setTimeout(() => {
+      const fallbackDetails = {};
+      dedupedUrls.forEach((listingUrl) => {
+        fallbackDetails[listingUrl] = {
+          listingUrl,
+          detailFetchStatus: 'timeout',
+          detailFetchError: 'Enrichment bridge timed out.'
+        };
+      });
+      finalize(fallbackDetails);
+    }, timeoutMs);
+
+    window.postMessage(
+      {
+        type: TRULIA_BRIDGE_REQUEST_TYPE,
+        requestId,
+        listingUrls: dedupedUrls
+      },
+      window.location.origin
+    );
+  });
+}
+
+function startTruliaEnrichmentJob(jobId, listings) {
+  const normalizedListings = Array.isArray(listings) ? listings.filter((listing) => listing && typeof listing === 'object') : [];
+  const total = normalizedListings.length;
+  activeTruliaJobId = jobId;
+
+  safeSendRuntimeMessage({
+    type: 'TRULIA_ENRICH_STARTED',
+    jobId,
+    total
+  });
+
+  void enrichTruliaListingsViaScriptlet(normalizedListings, {
+    requestId: jobId,
+    suppressRuntimeProgress: true,
+    onProgress(progress) {
+      safeSendRuntimeMessage({
+        type: 'TRULIA_ENRICH_PROGRESS',
+        jobId,
+        completed: progress.completed,
+        total: progress.total,
+        listingUrl: progress.listingUrl,
+        detailFetchStatus: progress.detailFetchStatus
+      });
+    }
+  })
+    .then((result) => {
+      safeSendRuntimeMessage({
+        type: 'TRULIA_ENRICH_COMPLETE',
+        jobId,
+        total,
+        completed: total,
+        listings: result.listings,
+        enrichment: result.enrichment
+      });
+    })
+    .catch((error) => {
+      safeSendRuntimeMessage({
+        type: 'TRULIA_ENRICH_ERROR',
+        jobId,
+        error: error instanceof Error ? error.message : String(error || 'Unknown enrichment error'),
+        total
+      });
+    })
+    .finally(() => {
+      if (activeTruliaJobId === jobId) {
+        activeTruliaJobId = null;
+      }
+    });
+}
+
 function getPreferredAnchor(container, source) {
   if (!container) {
     return null;
@@ -1200,6 +1804,35 @@ browser.runtime.onMessage.addListener((message) => {
         ? message.jobId.trim()
         : createForRentEnrichmentRequestId();
     startForRentEnrichmentJob(jobId, incomingListings);
+    return Promise.resolve({
+      ok: true,
+      jobId,
+      total: incomingListings.length
+    });
+  }
+
+  if (message.type === 'START_TRULIA_ENRICHMENT') {
+    const source = getSourceFromHostname();
+    if (source !== 'trulia') {
+      return Promise.resolve({
+        ok: false,
+        error: 'Trulia enrichment can only run on a Trulia tab.'
+      });
+    }
+    if (activeTruliaJobId) {
+      return Promise.resolve({
+        ok: false,
+        error: 'A Trulia enrichment job is already running.',
+        jobId: activeTruliaJobId
+      });
+    }
+
+    const incomingListings = Array.isArray(message.listings) ? message.listings : [];
+    const jobId =
+      typeof message.jobId === 'string' && message.jobId.trim().length > 0
+        ? message.jobId.trim()
+        : createTruliaEnrichmentRequestId();
+    startTruliaEnrichmentJob(jobId, incomingListings);
     return Promise.resolve({
       ok: true,
       jobId,
