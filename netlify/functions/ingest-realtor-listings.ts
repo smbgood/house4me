@@ -1,88 +1,23 @@
 import type { Handler } from '@netlify/functions';
 
 import { defaultHeaders, optionsResponse } from './utils/cors';
-import { upsertListingsAndSnapshots } from './utils/listing-upsert';
-import { fetchAndParseRealtorListing } from './utils/sources/realtor';
-import { inferFenceValue, inferPetsValue, parseNumber, parseRent, toAbsoluteUrl } from './utils/sources/normalize';
-import { type NormalizedListingInput } from './utils/sources/types';
+import { formatIngestError, getBearerToken, logIngestError, normalizeRealtorListings } from './utils/realtor-ingest';
 import { supabaseAdmin } from './utils/supabase';
 
-const REALTOR_BASE_URL = 'https://www.realtor.com';
+const LOG_PREFIX = '[ingest-realtor]';
 
 interface IngestBody {
   listings?: unknown;
 }
 
-function getBearerToken(headers: Record<string, string | undefined>): string | null {
-  const value = headers['authorization'] ?? headers['Authorization'];
-  if (!value) {
-    return null;
-  }
-  const match = value.match(/^Bearer\s+(.+)$/i);
-  return match ? match[1].trim() : null;
-}
-
-function normalizeIncomingListing(input: unknown): NormalizedListingInput | null {
-  if (!input || typeof input !== 'object') {
-    return null;
-  }
-
-  const candidate = input as {
-    listingUrl?: unknown;
-    sourceListingId?: unknown;
-    sourcePropertyId?: unknown;
-    imageUrl?: unknown;
-    title?: unknown;
-    address?: unknown;
-    city?: unknown;
-    state?: unknown;
-    zip?: unknown;
-    rentPrice?: unknown;
-    bedrooms?: unknown;
-    bathrooms?: unknown;
-    allowsPets?: unknown;
-    hasFence?: unknown;
-    rawSnippet?: unknown;
-    rawPayload?: unknown;
-  };
-
-  const listingUrl = toAbsoluteUrl(
-    typeof candidate.listingUrl === 'string' ? candidate.listingUrl : undefined,
-    REALTOR_BASE_URL
-  );
-  if (!listingUrl) {
-    return null;
-  }
-
-  const sourceText = [
-    typeof candidate.title === 'string' ? candidate.title : '',
-    typeof candidate.rawSnippet === 'string' ? candidate.rawSnippet : ''
-  ]
-    .join(' ')
-    .trim();
-
-  return {
-    source: 'realtor',
-    sourceListingId: typeof candidate.sourceListingId === 'string' ? candidate.sourceListingId : undefined,
-    sourcePropertyId: typeof candidate.sourcePropertyId === 'string' ? candidate.sourcePropertyId : undefined,
-    listingUrl,
-    imageUrl: toAbsoluteUrl(typeof candidate.imageUrl === 'string' ? candidate.imageUrl : undefined, REALTOR_BASE_URL),
-    title: typeof candidate.title === 'string' ? candidate.title : undefined,
-    address: typeof candidate.address === 'string' ? candidate.address : undefined,
-    city: typeof candidate.city === 'string' ? candidate.city : undefined,
-    state: typeof candidate.state === 'string' ? candidate.state : undefined,
-    zip: typeof candidate.zip === 'string' ? candidate.zip : undefined,
-    rentPrice: parseRent(candidate.rentPrice),
-    bedrooms: parseNumber(candidate.bedrooms),
-    bathrooms: parseNumber(candidate.bathrooms),
-    allowsPets: typeof candidate.allowsPets === 'boolean' ? candidate.allowsPets : inferPetsValue(sourceText),
-    hasFence: typeof candidate.hasFence === 'boolean' ? candidate.hasFence : inferFenceValue(sourceText),
-    rawSnippet: typeof candidate.rawSnippet === 'string' ? candidate.rawSnippet : undefined,
-    rawPayload: candidate.rawPayload ?? input
-  };
+function resolveSiteUrl(): string {
+  const baseUrl = process.env['URL'] ?? process.env['DEPLOY_PRIME_URL'] ?? 'http://localhost:9999';
+  return baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl;
 }
 
 export const handler: Handler = async (event) => {
+  const requestStartedAt = Date.now();
+
   if (event.httpMethod === 'OPTIONS') {
     return optionsResponse;
   }
@@ -97,6 +32,7 @@ export const handler: Handler = async (event) => {
 
   const configuredToken = process.env['REALTOR_INGEST_TOKEN'];
   if (!configuredToken) {
+    console.error(`${LOG_PREFIX} Missing REALTOR_INGEST_TOKEN environment variable.`);
     return {
       statusCode: 500,
       headers: defaultHeaders,
@@ -106,6 +42,7 @@ export const handler: Handler = async (event) => {
 
   const token = getBearerToken(event.headers);
   if (!token || token !== configuredToken) {
+    console.warn(`${LOG_PREFIX} Unauthorized ingest request.`);
     return {
       statusCode: 401,
       headers: defaultHeaders,
@@ -116,7 +53,8 @@ export const handler: Handler = async (event) => {
   let parsedBody: IngestBody;
   try {
     parsedBody = event.body ? (JSON.parse(event.body) as IngestBody) : {};
-  } catch {
+  } catch (parseError) {
+    logIngestError('Failed to parse request JSON', parseError);
     return {
       statusCode: 400,
       headers: defaultHeaders,
@@ -125,6 +63,7 @@ export const handler: Handler = async (event) => {
   }
 
   if (!Array.isArray(parsedBody.listings)) {
+    console.warn(`${LOG_PREFIX} Request body missing listings array.`);
     return {
       statusCode: 400,
       headers: defaultHeaders,
@@ -132,76 +71,123 @@ export const handler: Handler = async (event) => {
     };
   }
 
-  const startedAt = new Date().toISOString();
+  const bodyBytes = event.body?.length ?? 0;
+  console.log(
+    `${LOG_PREFIX} Request received with ${parsedBody.listings.length} listings (${bodyBytes} byte body).`
+  );
+
+  const { normalizedFromExtension, dedupedUrls, duplicateUrlCount, rejectedDuringNormalization } =
+    normalizeRealtorListings(parsedBody.listings);
+
+  if (rejectedDuringNormalization > 0) {
+    console.warn(
+      `${LOG_PREFIX} ${rejectedDuringNormalization} listing(s) rejected during normalization (missing or invalid listingUrl).`
+    );
+  }
+
+  if (duplicateUrlCount > 0) {
+    console.log(`${LOG_PREFIX} Collapsed ${duplicateUrlCount} duplicate listing URL(s).`);
+  }
+
   const runInsert = await supabaseAdmin
     .from('source_sync_runs')
     .insert({
       source: 'realtor',
       status: 'started',
-      started_at: startedAt,
+      started_at: new Date().toISOString(),
       metadata: {
         mode: 'manual-addon',
-        submittedCount: parsedBody.listings.length
+        submittedCount: parsedBody.listings.length,
+        normalizedCount: normalizedFromExtension.length,
+        queuedCount: dedupedUrls.length
       }
     })
     .select('id')
     .single();
 
-  const runId = runInsert.data?.id;
-  const normalizedFromExtension = parsedBody.listings
-    .map((listing) => normalizeIncomingListing(listing))
-    .filter((listing): listing is NormalizedListingInput => Boolean(listing));
+  if (runInsert.error) {
+    logIngestError('Failed to create source_sync_runs row', runInsert.error);
+    return {
+      statusCode: 500,
+      headers: defaultHeaders,
+      body: JSON.stringify({ error: formatIngestError(runInsert.error) })
+    };
+  }
 
-  const dedupedUrls = [...new Set(normalizedFromExtension.map((listing) => listing.listingUrl))];
+  const runId = runInsert.data?.id;
+  if (!runId) {
+    console.error(`${LOG_PREFIX} Failed to create source_sync_runs row: missing run id.`);
+    return {
+      statusCode: 500,
+      headers: defaultHeaders,
+      body: JSON.stringify({ error: 'Failed to create sync run.' })
+    };
+  }
+
+  console.log(`${LOG_PREFIX} Sync run ${runId} created.`);
+
+  const backgroundUrl = `${resolveSiteUrl()}/.netlify/functions/ingest-realtor-listings-background`;
+  const requestPayload = JSON.stringify({
+    runId,
+    extensionListings: normalizedFromExtension
+  });
 
   try {
-    const enrichedListings = await Promise.all(
-      dedupedUrls.map(async (listingUrl) => {
-        try {
-          return await fetchAndParseRealtorListing(listingUrl);
-        } catch {
-          return null;
-        }
-      })
+    const queueResponse = await fetch(backgroundUrl, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${configuredToken}`,
+        'Content-Type': 'application/json'
+      },
+      body: requestPayload
+    });
+
+    if (queueResponse.status !== 202) {
+      const responseText = await queueResponse.text().catch(() => '');
+      const errorMessage = `Failed to queue background ingest (status ${queueResponse.status}).`;
+      logIngestError(errorMessage, responseText || 'No response body');
+
+      const runUpdate = await supabaseAdmin
+        .from('source_sync_runs')
+        .update({
+          status: 'error',
+          completed_at: new Date().toISOString(),
+          error_summary: errorMessage
+        })
+        .eq('id', runId);
+
+      if (runUpdate.error) {
+        logIngestError(`Failed to mark sync run ${runId} as error`, runUpdate.error);
+      }
+
+      return {
+        statusCode: 500,
+        headers: defaultHeaders,
+        body: JSON.stringify({ error: errorMessage })
+      };
+    }
+
+    console.log(
+      `${LOG_PREFIX} Queued background ingest for run ${runId} in ${Date.now() - requestStartedAt}ms.`
     );
-
-    const extensionListingByUrl = new Map(normalizedFromExtension.map((listing) => [listing.listingUrl, listing]));
-    const acceptedListings: NormalizedListingInput[] = dedupedUrls
-      .map((url, index) => {
-        const enriched = enrichedListings[index];
-        if (enriched) {
-          return enriched;
-        }
-        return extensionListingByUrl.get(url) ?? null;
-      })
-      .filter((listing): listing is NormalizedListingInput => Boolean(listing));
-
-    const upserted = await upsertListingsAndSnapshots(acceptedListings);
-
-    await supabaseAdmin
-      .from('source_sync_runs')
-      .update({
-        status: 'success',
-        completed_at: new Date().toISOString(),
-        listings_found: acceptedListings.length,
-        listings_upserted: upserted
-      })
-      .eq('id', runId);
 
     return {
       statusCode: 200,
       headers: defaultHeaders,
       body: JSON.stringify({
         source: 'realtor',
+        status: 'queued',
+        runId,
         received: parsedBody.listings.length,
-        accepted: acceptedListings.length,
-        rejected: parsedBody.listings.length - acceptedListings.length,
-        upserted
+        accepted: dedupedUrls.length,
+        rejected: parsedBody.listings.length - dedupedUrls.length
       })
     };
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Unknown ingest error';
-    await supabaseAdmin
+    const errorMessage = formatIngestError(error);
+    logIngestError(`Ingest queueing failed after ${Date.now() - requestStartedAt}ms`, error);
+
+    const runUpdate = await supabaseAdmin
       .from('source_sync_runs')
       .update({
         status: 'error',
@@ -209,6 +195,10 @@ export const handler: Handler = async (event) => {
         error_summary: errorMessage
       })
       .eq('id', runId);
+
+    if (runUpdate.error) {
+      logIngestError(`Failed to mark sync run ${runId} as error`, runUpdate.error);
+    }
 
     return {
       statusCode: 500,

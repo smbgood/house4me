@@ -17,3 +17,6 @@
 
 [functions]
   node_bundler = "esbuild"
+
+[functions.ingest-realtor-listings-background]
+  background = true

@@ -111,6 +111,19 @@ async function scanCurrentPage() {
       return;
     }
 
+    if (payload.status === 'queued') {
+      const runId = typeof payload.runId === 'string' ? payload.runId : 'unknown';
+      const shortRunId = runId.length > 8 ? runId.slice(0, 8) : runId;
+      setStatus(
+        `Ingest queued.
+Run: ${shortRunId}
+Received: ${payload.received ?? '?'}
+Accepted: ${payload.accepted ?? '?'}
+Rejected: ${payload.rejected ?? '?'}`
+      );
+      return;
+    }
+
     setStatus(
       `Ingest complete.
 Received: ${payload.received ?? '?'}
