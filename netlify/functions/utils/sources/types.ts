@@ -1,4 +1,4 @@
-export type ListingSource = 'zillow' | 'trulia' | 'forrent';
+export type ListingSource = 'zillow' | 'trulia' | 'forrent' | 'realtor';
 
 export interface SearchConfig {
   city: string;
@@ -11,6 +11,7 @@ export interface SearchConfig {
 export interface NormalizedListingInput {
   source: ListingSource;
   sourceListingId?: string;
+  sourcePropertyId?: string;
   listingUrl: string;
   imageUrl?: string;
   title?: string;
@@ -23,6 +24,16 @@ export interface NormalizedListingInput {
   bathrooms?: number;
   allowsPets?: boolean | null;
   hasFence?: boolean | null;
+  availableDate?: string;
+  sqft?: number;
+  descriptionText?: string;
+  managementCompany?: string;
+  landlordName?: string;
+  photoCount?: number;
+  tags?: string[];
+  listingDetails?: unknown;
+  fees?: unknown;
+  popularity?: unknown;
   rawSnippet?: string;
   rawPayload?: unknown;
 }

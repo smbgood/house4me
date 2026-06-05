@@ -53,6 +53,41 @@ describe('Rental aggregator listing filters', () => {
       has_fence: false,
       status: 'active',
       last_seen_at: '2026-06-04T12:00:00.000Z'
+    },
+    {
+      id: '4',
+      source: 'realtor',
+      listing_url: 'https://example.com/realtor-1',
+      image_url: null,
+      title: 'Maple Family Home',
+      address: '42 Pappy Ln',
+      city: 'Garner',
+      state: 'NC',
+      zip: '27529',
+      rent_price: 2975,
+      bedrooms: 4,
+      bathrooms: 3,
+      allows_pets: true,
+      has_fence: true,
+      available_date: '2026-06-04',
+      sqft: 2717,
+      description_text: 'Lease this home and get more from Invitation Homes professional property management.',
+      management_company: 'Invitation Homes',
+      landlord_name: 'Invitation Homes',
+      tags: ['pets_allowed', 'fenced_yard'],
+      listing_details: [
+        {
+          category: 'Bedrooms',
+          parent_category: 'Interior',
+          text: ['Bedrooms: 4']
+        }
+      ],
+      fees: {
+        monthly_fees_text: 'Air Filter Delivery Fee: $10, Internet & Media: $85'
+      },
+      photo_count: 26,
+      status: 'active',
+      last_seen_at: '2026-06-04T12:00:00.000Z'
     }
   ];
 
@@ -99,6 +134,20 @@ describe('Rental aggregator listing filters', () => {
         }
       });
     }).as('getListings');
+
+    cy.intercept('GET', 'http://localhost:9999/.netlify/functions/get-listing*', (req) => {
+      expect(req.headers).to.have.property('authorization');
+      const id = String(req.query['id'] ?? '');
+      const listing = listings.find((item) => item.id === id);
+      if (!listing) {
+        req.reply({ statusCode: 404, body: { error: 'Listing not found.' } });
+        return;
+      }
+      req.reply({
+        statusCode: 200,
+        body: { listing }
+      });
+    }).as('getListing');
   });
 
   it('renders listings and applies filters', () => {
@@ -112,6 +161,7 @@ describe('Rental aggregator listing filters', () => {
     cy.contains('Blue Ranch').should('be.visible');
     cy.contains('City Duplex').should('be.visible');
     cy.contains('Parkside Home').should('be.visible');
+    cy.contains('Maple Family Home').should('be.visible');
 
     cy.get('select').eq(1).select('Allows pets');
     cy.contains('button', 'Apply filters').click();
@@ -125,6 +175,15 @@ describe('Rental aggregator listing filters', () => {
     cy.wait('@getListings');
     cy.contains('Parkside Home').should('be.visible');
     cy.contains('Blue Ranch').should('not.exist');
+
+    cy.get('select').eq(0).select('All');
+    cy.contains('button', 'Apply filters').click();
+    cy.wait('@getListings');
+    cy.contains('a', 'Maple Family Home').click();
+    cy.wait('@getListing');
+    cy.url().should('include', '/listings/4');
+    cy.contains('Description').should('be.visible');
+    cy.contains('Invitation Homes').should('be.visible');
   });
 
 });

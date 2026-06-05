@@ -4,6 +4,7 @@ const PRICE_TEXT_REGEX = /\$\s?\d[\d,]*/;
 const BEDROOMS_REGEX = /(\d+(?:\.\d+)?)\s*(?:bd|bed|beds|bedroom|bedrooms)\b/i;
 const BATHROOMS_REGEX = /(\d+(?:\.\d+)?)\s*(?:ba|bath|baths|bathroom|bathrooms)\b/i;
 const TRULIA_LISTING_PATH_REGEX = /\/(for_rent|p|property|home)\//i;
+const REALTOR_LISTING_PATH_REGEX = /\/rentals\/details\//i;
 const BAD_HREF_REGEX = /^(#|javascript:|mailto:|tel:)/i;
 
 function normalizeText(value) {
@@ -240,6 +241,86 @@ function scrapeZillowListingsFromPage() {
   return scrapeTruliaListingsFromPage();
 }
 
+function scrapeRealtorListingsFromPage() {
+  const deduped = new Map();
+  const cards = document.querySelectorAll('[data-listing-id][data-property-id], [data-listing-id], [data-property-id]');
+
+  cards.forEach((card) => {
+    const listingId = normalizeText(card.getAttribute('data-listing-id') ?? '');
+    const propertyId = normalizeText(card.getAttribute('data-property-id') ?? '');
+    const anchor =
+      card.querySelector('a[href*="/rentals/details/"]') ??
+      [...card.querySelectorAll('a[href]')].find((item) => REALTOR_LISTING_PATH_REGEX.test(item.getAttribute('href') ?? ''));
+    if (!anchor) {
+      return;
+    }
+
+    const listingUrl = toAbsoluteUrl(anchor.getAttribute('href'));
+    if (!listingUrl || !REALTOR_LISTING_PATH_REGEX.test(listingUrl)) {
+      return;
+    }
+
+    const cardText = normalizeText(card.innerText);
+    const imageElement = card.querySelector('img');
+    const title =
+      normalizeText(anchor.getAttribute('aria-label') ?? '') ||
+      getTextFromSelectors(card, ['[data-testid*="card-title"]', '[class*="card-title"]', '[class*="title"]']) ||
+      null;
+
+    deduped.set(listingUrl, {
+      listingUrl,
+      sourceListingId: listingId || null,
+      sourcePropertyId: propertyId || null,
+      title,
+      imageUrl: imageElement ? imageElement.src : null,
+      rentPrice: parsePriceOrNull(cardText),
+      bedrooms: parseFloatOrNull(cardText.match(BEDROOMS_REGEX)),
+      bathrooms: parseFloatOrNull(cardText.match(BATHROOMS_REGEX)),
+      rawSnippet: cardText.slice(0, 700),
+      rawPayload: {
+        scannedFrom: window.location.href,
+        source: 'realtor',
+        cardAttributes: {
+          listingId: listingId || null,
+          propertyId: propertyId || null
+        }
+      }
+    });
+  });
+
+  if (deduped.size > 0) {
+    return [...deduped.values()];
+  }
+
+  const links = document.querySelectorAll('a[href*="/rentals/details/"]');
+  links.forEach((anchor) => {
+    const listingUrl = toAbsoluteUrl(anchor.getAttribute('href'));
+    if (!listingUrl || !REALTOR_LISTING_PATH_REGEX.test(listingUrl)) {
+      return;
+    }
+
+    const container = anchor.closest('article, li, [data-listing-id], [class*="Card"], [class*="card"]') ?? anchor.parentElement;
+    const containerText = normalizeText(container ? container.innerText : anchor.textContent);
+    deduped.set(listingUrl, {
+      listingUrl,
+      sourceListingId: null,
+      sourcePropertyId: null,
+      title: normalizeText(anchor.getAttribute('aria-label') ?? '') || normalizeText(anchor.textContent) || null,
+      imageUrl: container?.querySelector('img')?.src ?? null,
+      rentPrice: parsePriceOrNull(containerText),
+      bedrooms: parseFloatOrNull(containerText.match(BEDROOMS_REGEX)),
+      bathrooms: parseFloatOrNull(containerText.match(BATHROOMS_REGEX)),
+      rawSnippet: containerText.slice(0, 700),
+      rawPayload: {
+        scannedFrom: window.location.href,
+        source: 'realtor'
+      }
+    });
+  });
+
+  return [...deduped.values()];
+}
+
 function getSourceFromHostname() {
   const hostname = window.location.hostname.toLowerCase();
   if (hostname.includes('trulia.com')) {
@@ -250,6 +331,9 @@ function getSourceFromHostname() {
   }
   if (hostname.includes('zillow.com')) {
     return 'zillow';
+  }
+  if (hostname.includes('realtor.com')) {
+    return 'realtor';
   }
   return null;
 }
@@ -273,7 +357,9 @@ browser.runtime.onMessage.addListener((message) => {
       ? scrapeForRentListingsFromPage()
       : source === 'zillow'
         ? scrapeZillowListingsFromPage()
-        : scrapeTruliaListingsFromPage();
+        : source === 'realtor'
+          ? scrapeRealtorListingsFromPage()
+          : scrapeTruliaListingsFromPage();
   return Promise.resolve({
     source,
     listings,

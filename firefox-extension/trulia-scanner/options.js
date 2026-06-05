@@ -7,6 +7,8 @@ const forrentIngestUrlInput = document.getElementById('forrentIngestUrl');
 const forrentIngestTokenInput = document.getElementById('forrentIngestToken');
 const zillowIngestUrlInput = document.getElementById('zillowIngestUrl');
 const zillowIngestTokenInput = document.getElementById('zillowIngestToken');
+const realtorIngestUrlInput = document.getElementById('realtorIngestUrl');
+const realtorIngestTokenInput = document.getElementById('realtorIngestToken');
 const statusEl = document.getElementById('status');
 
 function setStatus(message) {
@@ -22,7 +24,9 @@ async function loadSettings() {
     'forrentIngestUrl',
     'forrentIngestToken',
     'zillowIngestUrl',
-    'zillowIngestToken'
+    'zillowIngestToken',
+    'realtorIngestUrl',
+    'realtorIngestToken'
   ]);
   truliaIngestUrlInput.value =
     typeof values.truliaIngestUrl === 'string'
@@ -40,6 +44,8 @@ async function loadSettings() {
   forrentIngestTokenInput.value = typeof values.forrentIngestToken === 'string' ? values.forrentIngestToken : '';
   zillowIngestUrlInput.value = typeof values.zillowIngestUrl === 'string' ? values.zillowIngestUrl : '';
   zillowIngestTokenInput.value = typeof values.zillowIngestToken === 'string' ? values.zillowIngestToken : '';
+  realtorIngestUrlInput.value = typeof values.realtorIngestUrl === 'string' ? values.realtorIngestUrl : '';
+  realtorIngestTokenInput.value = typeof values.realtorIngestToken === 'string' ? values.realtorIngestToken : '';
 }
 
 form.addEventListener('submit', (event) => {
@@ -51,7 +57,18 @@ form.addEventListener('submit', (event) => {
   const forrentIngestToken = forrentIngestTokenInput.value.trim();
   const zillowIngestUrl = zillowIngestUrlInput.value.trim();
   const zillowIngestToken = zillowIngestTokenInput.value.trim();
-  if (!truliaIngestUrl || !truliaIngestToken || !forrentIngestUrl || !forrentIngestToken || !zillowIngestUrl || !zillowIngestToken) {
+  const realtorIngestUrl = realtorIngestUrlInput.value.trim();
+  const realtorIngestToken = realtorIngestTokenInput.value.trim();
+  if (
+    !truliaIngestUrl ||
+    !truliaIngestToken ||
+    !forrentIngestUrl ||
+    !forrentIngestToken ||
+    !zillowIngestUrl ||
+    !zillowIngestToken ||
+    !realtorIngestUrl ||
+    !realtorIngestToken
+  ) {
     setStatus('All fields are required.');
     return;
   }
@@ -64,6 +81,8 @@ form.addEventListener('submit', (event) => {
       forrentIngestToken,
       zillowIngestUrl,
       zillowIngestToken,
+      realtorIngestUrl,
+      realtorIngestToken,
       ingestUrl: truliaIngestUrl,
       ingestToken: truliaIngestToken
     })

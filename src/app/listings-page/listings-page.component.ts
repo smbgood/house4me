@@ -1,10 +1,10 @@
 import { CommonModule } from '@angular/common';
 import { Component, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { RouterModule } from '@angular/router';
 
 import {
   type ListingFilters,
-  type ListingsResponse,
   type RentalListing,
   RentalListingsService
 } from '../services/rental-listings.service';
@@ -14,7 +14,7 @@ type SelectBool = '' | 'true' | 'false';
 @Component({
   selector: 'app-listings-page',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, RouterModule],
   templateUrl: './listings-page.component.html',
   styleUrl: './listings-page.component.css'
 })

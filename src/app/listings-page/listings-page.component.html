@@ -1,7 +1,7 @@
 <main class="page">
   <header class="page-header">
     <h1>House4Me Rental Aggregator</h1>
-    <p>View Zillow, Trulia, and ForRent listings in one place.</p>
+    <p>View Zillow, Trulia, ForRent, and Realtor.com listings in one place.</p>
   </header>
 
   <section class="filters">
@@ -12,6 +12,7 @@
         <option value="zillow">Zillow</option>
         <option value="trulia">Trulia</option>
         <option value="forrent">ForRent</option>
+        <option value="realtor">Realtor.com</option>
       </select>
     </label>
 
@@ -60,7 +61,9 @@
   <section *ngIf="!loading && !error" class="listings">
     <article class="listing" *ngFor="let listing of listings; trackBy: trackById">
       <div class="listing-main">
-        <h3>{{ listing.title || 'Untitled listing' }}</h3>
+        <h3>
+          <a [routerLink]="['/listings', listing.id]">{{ listing.title || 'Untitled listing' }}</a>
+        </h3>
         <p>{{ listing.address }}, {{ listing.city }}, {{ listing.state }} {{ listing.zip }}</p>
         <p class="rent">{{ listing.rent_price ? ('$' + listing.rent_price) : 'Price unavailable' }}</p>
         <p>

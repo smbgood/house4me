@@ -1,0 +1,75 @@
+<main class="detail-page">
+  <a routerLink="/" class="back-link">Back to listings</a>
+
+  <section *ngIf="loading" class="state">Loading listing details...</section>
+  <section *ngIf="error" class="state error">{{ error }}</section>
+
+  <section *ngIf="!loading && !error && listing" class="detail-card">
+    <header class="detail-header">
+      <h1>{{ listing.title || 'Untitled listing' }}</h1>
+      <span class="source">{{ listing.source | titlecase }}</span>
+    </header>
+
+    <p class="address">{{ listing.address }}, {{ listing.city }}, {{ listing.state }} {{ listing.zip }}</p>
+
+    <div class="metrics">
+      <article>
+        <h3>Rent</h3>
+        <p>{{ listing.rent_price ? ('$' + listing.rent_price) : 'Unavailable' }}</p>
+      </article>
+      <article>
+        <h3>Beds / Baths</h3>
+        <p>{{ listing.bedrooms ?? 'N/A' }} / {{ listing.bathrooms ?? 'N/A' }}</p>
+      </article>
+      <article>
+        <h3>Sq Ft</h3>
+        <p>{{ listing.sqft ?? 'N/A' }}</p>
+      </article>
+      <article>
+        <h3>Availability</h3>
+        <p>{{ listing.available_date || 'Unknown' }}</p>
+      </article>
+    </div>
+
+    <div class="meta-grid">
+      <p><strong>Pets:</strong> {{ listing.allows_pets === null ? 'Unknown' : (listing.allows_pets ? 'Allowed' : 'Not allowed') }}</p>
+      <p><strong>Fence:</strong> {{ listing.has_fence === null ? 'Unknown' : (listing.has_fence ? 'Yes' : 'No') }}</p>
+      <p><strong>Management:</strong> {{ listing.management_company || 'Unknown' }}</p>
+      <p><strong>Landlord:</strong> {{ listing.landlord_name || 'Unknown' }}</p>
+      <p><strong>Photos:</strong> {{ listing.photo_count ?? 'N/A' }}</p>
+      <p><strong>Last Seen:</strong> {{ listing.last_seen_at | date:'medium' }}</p>
+    </div>
+
+    <section *ngIf="listing.description_text" class="section-block">
+      <h2>Description</h2>
+      <p>{{ listing.description_text }}</p>
+    </section>
+
+    <section *ngIf="listing.tags && listing.tags.length > 0" class="section-block">
+      <h2>Tags</h2>
+      <div class="tag-list">
+        <span *ngFor="let tag of listing.tags">{{ tag }}</span>
+      </div>
+    </section>
+
+    <section *ngIf="parseListingDetails(listing.listing_details).length > 0" class="section-block">
+      <h2>Listing Details</h2>
+      <article *ngFor="let detail of parseListingDetails(listing.listing_details)" class="detail-row">
+        <h3>{{ detail.category }}</h3>
+        <p class="parent">{{ detail.parent_category }}</p>
+        <ul>
+          <li *ngFor="let textItem of detail.text">{{ textItem }}</li>
+        </ul>
+      </article>
+    </section>
+
+    <section *ngIf="getFeeEntries(listing.fees).length > 0" class="section-block">
+      <h2>Fees</h2>
+      <ul>
+        <li *ngFor="let fee of getFeeEntries(listing.fees)">{{ fee }}</li>
+      </ul>
+    </section>
+
+    <a [href]="listing.listing_url" target="_blank" rel="noopener noreferrer" class="external-link">Open original listing</a>
+  </section>
+</main>

@@ -2,12 +2,13 @@
   "manifest_version": 3,
   "name": "House4Me Rental Scanner",
   "version": "1.0.0",
-  "description": "Scan Trulia, ForRent, or Zillow pages and send listings to House4Me ingest.",
+  "description": "Scan Trulia, ForRent, Zillow, or Realtor.com pages and send listings to House4Me ingest.",
   "permissions": ["activeTab", "storage", "tabs"],
   "host_permissions": [
     "*://*.trulia.com/*",
     "*://*.forrent.com/*",
     "*://*.zillow.com/*",
+    "*://*.realtor.com/*",
     "http://localhost:9999/*",
     "https://*.netlify.app/*"
   ],
@@ -21,7 +22,7 @@
   },
   "content_scripts": [
     {
-      "matches": ["*://*.trulia.com/*", "*://*.forrent.com/*", "*://*.zillow.com/*"],
+      "matches": ["*://*.trulia.com/*", "*://*.forrent.com/*", "*://*.zillow.com/*", "*://*.realtor.com/*"],
       "js": ["content-script.js"],
       "run_at": "document_idle"
     }

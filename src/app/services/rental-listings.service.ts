@@ -6,6 +6,8 @@ import { GoogleAuthService } from './google-auth.service';
 export interface RentalListing {
   id: string;
   source: string;
+  source_listing_id?: string | null;
+  source_property_id?: string | null;
   listing_url: string;
   image_url: string | null;
   title: string | null;
@@ -18,8 +20,22 @@ export interface RentalListing {
   bathrooms: number | null;
   allows_pets: boolean | null;
   has_fence: boolean | null;
+  available_date?: string | null;
+  sqft?: number | null;
+  description_text?: string | null;
+  management_company?: string | null;
+  landlord_name?: string | null;
+  photo_count?: number | null;
+  tags?: string[] | null;
+  listing_details?: unknown;
+  fees?: unknown;
+  popularity?: unknown;
+  raw_snippet?: string | null;
+  raw_payload?: unknown;
   status: string;
   last_seen_at: string;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface ListingFilters {
@@ -33,6 +49,10 @@ export interface ListingFilters {
 
 export interface ListingsResponse {
   listings: RentalListing[];
+}
+
+export interface ListingResponse {
+  listing: RentalListing;
 }
 
 @Injectable({
@@ -76,5 +96,21 @@ export class RentalListingsService {
     }
 
     return (await response.json()) as ListingsResponse;
+  }
+
+  async getListing(id: string): Promise<ListingResponse> {
+    const params = new URLSearchParams({ id });
+    const url = `${environment.apiUrl}/get-listing?${params.toString()}`;
+    const refreshToken = this.googleAuthService.getRefreshToken();
+    const headers: HeadersInit = refreshToken
+      ? { Authorization: `Bearer ${refreshToken}` }
+      : {};
+
+    const response = await fetch(url, { headers });
+    if (!response.ok) {
+      throw new Error(`Failed to load listing (${response.status}).`);
+    }
+
+    return (await response.json()) as ListingResponse;
   }
 }

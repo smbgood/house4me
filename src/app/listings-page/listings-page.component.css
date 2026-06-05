@@ -98,6 +98,15 @@ button.ghost {
   margin: 0 0 0.35rem;
 }
 
+.listing-main h3 a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.listing-main h3 a:hover {
+  text-decoration: underline;
+}
+
 .listing-side {
   display: flex;
   flex-direction: column;

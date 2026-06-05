@@ -17,7 +17,9 @@ async function getSettings() {
     'forrentIngestUrl',
     'forrentIngestToken',
     'zillowIngestUrl',
-    'zillowIngestToken'
+    'zillowIngestToken',
+    'realtorIngestUrl',
+    'realtorIngestToken'
   ]);
   return {
     truliaIngestUrl:
@@ -35,7 +37,9 @@ async function getSettings() {
     forrentIngestUrl: typeof values.forrentIngestUrl === 'string' ? values.forrentIngestUrl.trim() : '',
     forrentIngestToken: typeof values.forrentIngestToken === 'string' ? values.forrentIngestToken.trim() : '',
     zillowIngestUrl: typeof values.zillowIngestUrl === 'string' ? values.zillowIngestUrl.trim() : '',
-    zillowIngestToken: typeof values.zillowIngestToken === 'string' ? values.zillowIngestToken.trim() : ''
+    zillowIngestToken: typeof values.zillowIngestToken === 'string' ? values.zillowIngestToken.trim() : '',
+    realtorIngestUrl: typeof values.realtorIngestUrl === 'string' ? values.realtorIngestUrl.trim() : '',
+    realtorIngestToken: typeof values.realtorIngestToken === 'string' ? values.realtorIngestToken.trim() : ''
   };
 }
 
@@ -59,10 +63,12 @@ async function scanCurrentPage() {
     source = 'forrent';
   } else if (tab.url.includes('zillow.com')) {
     source = 'zillow';
+  } else if (tab.url.includes('realtor.com')) {
+    source = 'realtor';
   }
 
   if (!source) {
-    setStatus('Active tab must be on Trulia, ForRent, or Zillow.');
+    setStatus('Active tab must be on Trulia, ForRent, Zillow, or Realtor.com.');
     return;
   }
 
@@ -71,13 +77,17 @@ async function scanCurrentPage() {
       ? settings.truliaIngestUrl
       : source === 'forrent'
         ? settings.forrentIngestUrl
-        : settings.zillowIngestUrl;
+        : source === 'zillow'
+          ? settings.zillowIngestUrl
+          : settings.realtorIngestUrl;
   const ingestToken =
     source === 'trulia'
       ? settings.truliaIngestToken
       : source === 'forrent'
         ? settings.forrentIngestToken
-        : settings.zillowIngestToken;
+        : source === 'zillow'
+          ? settings.zillowIngestToken
+          : settings.realtorIngestToken;
   if (!ingestUrl || !ingestToken) {
     setStatus(`Missing ${source} ingest URL/token. Open options and configure them first.`);
     return;
