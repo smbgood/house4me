@@ -1,6 +1,5 @@
 <main class="page">
   <header class="page-header">
-    <h1>House4Me Rental Aggregator</h1>
     <p>View Zillow, Trulia, ForRent, and Realtor.com listings in one place.</p>
     <a routerLink="/liked-listings" class="liked-link">View liked listings</a>
   </header>
@@ -102,7 +101,6 @@
         </p>
       </div>
       <div class="listing-side">
-        <span class="source">{{ listing.source | titlecase }}</span>
         <a [routerLink]="['/listings', listing.id]" class="details-btn">Details</a>
         <button
           type="button"
@@ -124,6 +122,7 @@
         >
           {{ pendingCrossOffIds.has(listing.id) ? 'Crossing off...' : 'Cross off' }}
         </button>
+        <span class="source">{{ listing.source | titlecase }}</span>
       </div>
     </article>
 
