@@ -61,8 +61,16 @@ export interface ListingCrossOffResponse {
   listing: {
     id: string;
     is_crossed_off: boolean;
+    cross_off_reason: string | null;
+    crossed_off_by: string | null;
+    crossed_off_at: string | null;
   };
 }
+
+export type CrossOffReason =
+  | 'did_not_match_requirements'
+  | 'did_not_like_area'
+  | 'did_not_like_house';
 
 export interface ListingLikeResponse {
   listing: {
@@ -130,7 +138,7 @@ export class RentalListingsService {
     return (await response.json()) as ListingResponse;
   }
 
-  async crossOffListing(id: string): Promise<ListingCrossOffResponse> {
+  async crossOffListing(id: string, crossOffReason: CrossOffReason): Promise<ListingCrossOffResponse> {
     const url = `${environment.apiUrl}/cross-off-listing`;
     const refreshToken = this.googleAuthService.getRefreshToken();
     const headers: HeadersInit = {
@@ -141,7 +149,7 @@ export class RentalListingsService {
     const response = await fetch(url, {
       method: 'POST',
       headers,
-      body: JSON.stringify({ id, isCrossedOff: true })
+      body: JSON.stringify({ id, isCrossedOff: true, crossOffReason })
     });
     if (!response.ok) {
       throw new Error(`Failed to cross off listing (${response.status}).`);

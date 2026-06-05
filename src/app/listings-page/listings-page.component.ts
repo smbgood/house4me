@@ -4,12 +4,14 @@ import { FormsModule } from '@angular/forms';
 import { RouterModule } from '@angular/router';
 
 import {
+  type CrossOffReason,
   type ListingFilters,
   type RentalListing,
   RentalListingsService
 } from '../services/rental-listings.service';
 
 type SelectBool = '' | 'true' | 'false';
+type CrossOffReasonOption = { value: CrossOffReason; label: string };
 
 @Component({
   selector: 'app-listings-page',
@@ -24,6 +26,14 @@ export class ListingsPageComponent implements OnInit {
   error = '';
   pendingCrossOffIds = new Set<string>();
   pendingLikeIds = new Set<string>();
+  crossOffModalListingId: string | null = null;
+  selectedCrossOffReason: CrossOffReason | '' = '';
+  crossOffModalError = '';
+  readonly crossOffReasonOptions: CrossOffReasonOption[] = [
+    { value: 'did_not_match_requirements', label: 'Did Not Match Requirements' },
+    { value: 'did_not_like_area', label: 'Did Not Like Area' },
+    { value: 'did_not_like_house', label: 'Did Not Like House' }
+  ];
 
   source = '';
   pets: SelectBool = '';
@@ -56,16 +66,38 @@ export class ListingsPageComponent implements OnInit {
     return item.id;
   }
 
-  async crossOffListing(id: string): Promise<void> {
+  openCrossOffModal(id: string): void {
     if (this.pendingCrossOffIds.has(id)) {
+      return;
+    }
+    this.crossOffModalListingId = id;
+    this.selectedCrossOffReason = '';
+    this.crossOffModalError = '';
+  }
+
+  closeCrossOffModal(): void {
+    this.crossOffModalListingId = null;
+    this.selectedCrossOffReason = '';
+    this.crossOffModalError = '';
+  }
+
+  async confirmCrossOffListing(): Promise<void> {
+    const id = this.crossOffModalListingId;
+    if (!id || this.pendingCrossOffIds.has(id)) {
+      return;
+    }
+    if (!this.selectedCrossOffReason) {
+      this.crossOffModalError = 'Please select a reason before crossing off.';
       return;
     }
 
     this.pendingCrossOffIds.add(id);
     this.error = '';
+    this.crossOffModalError = '';
     try {
-      await this.rentalListingsService.crossOffListing(id);
+      await this.rentalListingsService.crossOffListing(id, this.selectedCrossOffReason);
       this.listings = this.listings.filter((listing) => listing.id !== id);
+      this.closeCrossOffModal();
     } catch (error) {
       this.error = error instanceof Error ? error.message : 'Failed to cross off listing.';
     } finally {

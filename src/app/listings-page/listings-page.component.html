@@ -95,7 +95,7 @@
           type="button"
           class="cross-off"
           [disabled]="pendingCrossOffIds.has(listing.id)"
-          (click)="crossOffListing(listing.id)"
+          (click)="openCrossOffModal(listing.id)"
         >
           {{ pendingCrossOffIds.has(listing.id) ? 'Crossing off...' : 'Cross off' }}
         </button>
@@ -103,5 +103,38 @@
     </article>
 
     <p *ngIf="listings.length === 0" class="state">No listings match current filters.</p>
+  </section>
+
+  <section *ngIf="crossOffModalListingId" class="modal-backdrop" (click)="closeCrossOffModal()">
+    <div class="modal-card" role="dialog" aria-modal="true" (click)="$event.stopPropagation()">
+      <h2>Why are you crossing off this listing?</h2>
+      <label>
+        Reason
+        <select [(ngModel)]="selectedCrossOffReason">
+          <option value="">Select a reason</option>
+          <option *ngFor="let option of crossOffReasonOptions" [value]="option.value">
+            {{ option.label }}
+          </option>
+        </select>
+      </label>
+
+      <p *ngIf="crossOffModalError" class="modal-error">{{ crossOffModalError }}</p>
+
+      <div class="modal-actions">
+        <button type="button" class="ghost" (click)="closeCrossOffModal()">Cancel</button>
+        <button
+          type="button"
+          class="cross-off"
+          [disabled]="crossOffModalListingId ? pendingCrossOffIds.has(crossOffModalListingId) : false"
+          (click)="confirmCrossOffListing()"
+        >
+          {{
+            crossOffModalListingId && pendingCrossOffIds.has(crossOffModalListingId)
+              ? 'Crossing off...'
+              : 'Confirm cross off'
+          }}
+        </button>
+      </div>
+    </div>
   </section>
 </main>

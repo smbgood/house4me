@@ -147,18 +147,23 @@ describe('Rental aggregator listing filters', () => {
     cy.intercept('POST', 'http://localhost:9999/.netlify/functions/cross-off-listing', (req) => {
       expect(req.headers).to.have.property('authorization');
       const id = String((req.body as { id?: string })?.id ?? '');
+      const crossOffReason = String((req.body as { crossOffReason?: string })?.crossOffReason ?? '');
       const listing = listings.find((item) => item.id === id);
       if (!listing) {
         req.reply({ statusCode: 404, body: { error: 'Listing not found.' } });
         return;
       }
+      expect(crossOffReason).to.eq('did_not_match_requirements');
       crossedOffIds.add(id);
       req.reply({
         statusCode: 200,
         body: {
           listing: {
             id,
-            is_crossed_off: true
+            is_crossed_off: true,
+            cross_off_reason: crossOffReason,
+            crossed_off_by: 'authorized@example.com',
+            crossed_off_at: '2026-06-05T12:00:00.000Z'
           }
         }
       });
@@ -211,6 +216,9 @@ describe('Rental aggregator listing filters', () => {
     cy.contains('article', 'Blue Ranch').within(() => {
       cy.contains('button', 'Cross off').click();
     });
+    cy.contains('h2', 'Why are you crossing off this listing?').should('be.visible');
+    cy.get('.modal-card select').select('Did Not Match Requirements');
+    cy.contains('.modal-card button', 'Confirm cross off').click();
     cy.wait('@crossOffListing');
     cy.contains('Blue Ranch').should('not.exist');
     cy.contains('a', 'Maple Family Home').click();

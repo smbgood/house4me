@@ -7,7 +7,16 @@ import { defaultHeaders, optionsResponse } from './utils/cors';
 interface CrossOffBody {
   id?: unknown;
   isCrossedOff?: unknown;
+  crossOffReason?: unknown;
 }
+
+const CROSS_OFF_REASONS = [
+  'did_not_match_requirements',
+  'did_not_like_area',
+  'did_not_like_house'
+] as const;
+
+type CrossOffReason = (typeof CROSS_OFF_REASONS)[number];
 
 function parseBearerToken(headers: Record<string, string | undefined>): string | null {
   const authHeader = headers['authorization'] ?? headers['Authorization'];
@@ -98,13 +107,45 @@ export const handler: Handler = async (event) => {
 
   const isCrossedOff =
     typeof parsedBody.isCrossedOff === 'boolean' ? parsedBody.isCrossedOff : true;
+  const crossOffReasonValue =
+    typeof parsedBody.crossOffReason === 'string' ? parsedBody.crossOffReason.trim() : '';
+  const crossOffReason = (
+    CROSS_OFF_REASONS as readonly string[]
+  ).includes(crossOffReasonValue)
+    ? (crossOffReasonValue as CrossOffReason)
+    : null;
+  const crossedOffBy = verification.email?.trim().toLowerCase() ?? null;
+
+  if (isCrossedOff && !crossOffReason) {
+    return {
+      statusCode: 400,
+      headers: defaultHeaders,
+      body: JSON.stringify({
+        error:
+          'Body parameter crossOffReason is required and must be one of: did_not_match_requirements, did_not_like_area, did_not_like_house.'
+      })
+    };
+  }
 
   const supabaseAdmin = getSupabaseAdmin();
+  const updatePayload = isCrossedOff
+    ? {
+        is_crossed_off: true,
+        cross_off_reason: crossOffReason,
+        crossed_off_by: crossedOffBy,
+        crossed_off_at: new Date().toISOString()
+      }
+    : {
+        is_crossed_off: false,
+        cross_off_reason: null,
+        crossed_off_by: null,
+        crossed_off_at: null
+      };
   const updateResult = await supabaseAdmin
     .from('rental_listings')
-    .update({ is_crossed_off: isCrossedOff })
+    .update(updatePayload)
     .eq('id', id)
-    .select('id, is_crossed_off')
+    .select('id, is_crossed_off, cross_off_reason, crossed_off_by, crossed_off_at')
     .maybeSingle();
 
   if (updateResult.error) {
