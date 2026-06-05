@@ -83,31 +83,37 @@
   <section *ngIf="!loading && !error" class="listings">
     <article class="listing" *ngFor="let listing of listings; trackBy: trackById">
       <div class="listing-main">
-        <a [href]="listing.listing_url" target="_blank" rel="noopener noreferrer"><h3>{{ listing.title || 'Untitled listing' }}</h3></a>
-        <p class="rent">{{ listing.rent_price ? ('$' + listing.rent_price) : 'Price unavailable' }}</p>
-        <p>
-          Pets:
-          <strong>{{
-            listing.allows_pets === null ? 'Unknown' : (listing.allows_pets ? 'Allowed' : 'Not allowed')
-          }}</strong>
-          | Fence:
-          <strong>{{ listing.has_fence === null ? 'Unknown' : (listing.has_fence ? 'Yes' : 'No') }}</strong>
-        </p>
-      </div>
-      <div class="listing-side">
-        <a [routerLink]="['/listings', listing.id]" [queryParams]="{ list: selectedListSlug }" class="details-btn">Details</a>
-        <button
-          type="button"
-          class="like-toggle"
-          [disabled]="pendingLikeIds.has(listing.id)"
-          (click)="toggleLikeListing(listing.id, !!listing.is_liked)"
-        >
-          {{
-            pendingLikeIds.has(listing.id)
-              ? 'Saving...'
-              : (listing.is_liked ? 'Unlike listing' : 'Like listing')
-          }}
-        </button>
+        <div class="listing-top">
+          <div class="listing-info">
+            <a [href]="listing.listing_url" target="_blank" rel="noopener noreferrer"><h3>{{ listing.title || 'Untitled listing' }}</h3></a>
+            <p>{{ listing.address }}, {{ listing.city }}, {{ listing.state }} {{ listing.zip }}</p>
+            <p class="rent">{{ listing.rent_price ? ('$' + listing.rent_price) : 'Price unavailable' }}</p>
+            <p>
+              Pets:
+              <strong>{{
+                listing.allows_pets === null ? 'Unknown' : (listing.allows_pets ? 'Allowed' : 'Not allowed')
+              }}</strong>
+              | Fence:
+              <strong>{{ listing.has_fence === null ? 'Unknown' : (listing.has_fence ? 'Yes' : 'No') }}</strong>
+            </p>
+            <span class="source">{{ formatListingSources(listing) }}</span>
+          </div>
+          <div class="listing-primary-actions">
+            <a [routerLink]="['/listings', listing.id]" [queryParams]="{ list: selectedListSlug }" class="details-btn">Details</a>
+            <button
+              type="button"
+              class="like-toggle"
+              [disabled]="pendingLikeIds.has(listing.id)"
+              (click)="toggleLikeListing(listing.id, !!listing.is_liked)"
+            >
+              {{
+                pendingLikeIds.has(listing.id)
+                  ? 'Saving...'
+                  : (listing.is_liked ? 'Unlike listing' : 'Like listing')
+              }}
+            </button>
+          </div>
+        </div>
         <div class="reject-actions">
           <button
             *ngFor="let option of crossOffReasonOptions"
@@ -127,7 +133,6 @@
             {{ pendingCrossOffIds.has(listing.id) ? 'Crossing off...' : 'Other' }}
           </button>
         </div>
-        <span class="source">{{ formatListingSources(listing) }}</span>
       </div>
     </article>
 
