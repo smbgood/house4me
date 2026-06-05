@@ -328,7 +328,9 @@ Rejected: ${payload.rejected ?? '?'}`
       source === 'forrent' && scanResult.enrichment
         ? `
 Enriched: ${scanResult.enrichment.succeeded ?? '?'} / ${scanResult.enrichment.attempted ?? '?'}
-Enrich Failed: ${scanResult.enrichment.failed ?? '?'}`
+Enrich Failed: ${scanResult.enrichment.failed ?? '?'}
+With Amenities: ${scanResult.enrichment.amenityDiagnostics?.withAmenities ?? '?'}
+Missing Amenities: ${scanResult.enrichment.amenityDiagnostics?.withoutAmenities ?? '?'}`
         : '';
     setStatus(
       `Ingest complete.
@@ -336,7 +338,13 @@ List: ${selectedListLabel}
 Received: ${payload.received ?? '?'}
 Accepted: ${payload.accepted ?? '?'}
 Upserted: ${payload.upserted ?? '?'}
-Rejected: ${payload.rejected ?? '?'}${enrichmentSummary}`
+Rejected: ${payload.rejected ?? '?'}${enrichmentSummary}${
+        payload.amenityDiagnostics
+          ? `
+Ingest w/ Amenities: ${payload.amenityDiagnostics.withAmenityTags ?? '?'}
+Ingest w/o Amenities: ${payload.amenityDiagnostics.withoutAmenityTags ?? '?'}`
+          : ''
+      }`
     );
   } catch (error) {
     setStatus(`Request failed: ${String(error)}`);

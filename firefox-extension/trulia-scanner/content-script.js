@@ -78,6 +78,7 @@ function mergeForRentListingDetails(listing, detail) {
       detailFetchStatus: detail.detailFetchStatus ?? 'unknown',
       detailFetchError: detail.detailFetchError ?? null,
       detailParserSource: detail.detailParserSource ?? null,
+      amenityExtractionDebug: isObject(detail.amenityExtractionDebug) ? detail.amenityExtractionDebug : null,
       detailFetchedAt: new Date().toISOString()
     }
   };
@@ -174,6 +175,192 @@ function ensureForRentEnrichmentBridgeInstalled() {
       return [objectValue];
     }
 
+    function findEmbeddedForRentProfile(value, depth = 0) {
+      if (!value || depth > 14 || typeof value !== 'object') {
+        return null;
+      }
+      if (Array.isArray(value)) {
+        for (const item of value) {
+          const found = findEmbeddedForRentProfile(item, depth + 1);
+          if (found) {
+            return found;
+          }
+        }
+        return null;
+      }
+
+      const objectValue = value;
+      if (
+        Array.isArray(objectValue.amenityGroups) ||
+        Array.isArray(objectValue.amenities) ||
+        Array.isArray(objectValue.communityFeatures)
+      ) {
+        return objectValue;
+      }
+
+      for (const key of Object.keys(objectValue)) {
+        const found = findEmbeddedForRentProfile(objectValue[key], depth + 1);
+        if (found) {
+          return found;
+        }
+      }
+      return null;
+    }
+
+    function extractEmbeddedForRentProfile(doc) {
+      const candidates = [];
+
+      const nextDataScript = doc.getElementById('__NEXT_DATA__');
+      if (nextDataScript) {
+        candidates.push({
+          source: '__NEXT_DATA__',
+          parsed: parseJsonSafely(nextDataScript.textContent || '')
+        });
+      }
+
+      doc.querySelectorAll('script[type="application/json"]').forEach((script, index) => {
+        candidates.push({
+          source: `application/json-script-${index}`,
+          parsed: parseJsonSafely(script.textContent || '')
+        });
+      });
+
+      for (const candidate of candidates) {
+        const profile = findEmbeddedForRentProfile(candidate.parsed);
+        if (profile) {
+          return {
+            profile,
+            source: candidate.source
+          };
+        }
+      }
+
+      return {
+        profile: null,
+        source: null
+      };
+    }
+
+    function extractAmenitiesFromEmbeddedProfile(profile) {
+      const rows = [];
+      const amenityTags = new Set();
+      const counts = {
+        amenityGroups: 0,
+        communityFeatures: 0,
+        flatAmenities: 0
+      };
+
+      if (Array.isArray(profile.amenityGroups)) {
+        profile.amenityGroups.forEach((group) => {
+          if (!group || typeof group !== 'object') {
+            return;
+          }
+          const items = Array.isArray(group.items)
+            ? group.items.map((item) => normalize(item)).filter(Boolean)
+            : [];
+          if (items.length === 0) {
+            return;
+          }
+          counts.amenityGroups += items.length;
+          items.forEach((item) => amenityTags.add(item));
+          rows.push({
+            category: typeof group.categoryName === 'string' ? group.categoryName : 'Amenities',
+            parent_category: 'Amenities',
+            text: items
+          });
+        });
+      }
+
+      if (Array.isArray(profile.communityFeatures)) {
+        const items = profile.communityFeatures
+          .map((entry) => {
+            if (typeof entry === 'string') {
+              return normalize(entry);
+            }
+            if (entry && typeof entry === 'object' && typeof entry.name === 'string') {
+              return normalize(entry.name);
+            }
+            return '';
+          })
+          .filter(Boolean);
+        if (items.length > 0) {
+          counts.communityFeatures = items.length;
+          items.forEach((item) => amenityTags.add(item));
+          rows.push({
+            category: 'Community Features',
+            parent_category: 'Amenities',
+            text: items
+          });
+        }
+      }
+
+      if (Array.isArray(profile.amenities)) {
+        const byCategory = new Map();
+        profile.amenities.forEach((entry) => {
+          if (!entry || typeof entry !== 'object' || typeof entry.name !== 'string') {
+            return;
+          }
+          const name = normalize(entry.name);
+          if (!name) {
+            return;
+          }
+          counts.flatAmenities += 1;
+          amenityTags.add(name);
+          const category = typeof entry.categoryName === 'string' ? entry.categoryName : 'Amenities';
+          if (!byCategory.has(category)) {
+            byCategory.set(category, []);
+          }
+          byCategory.get(category).push(name);
+        });
+
+        byCategory.forEach((items, category) => {
+          const alreadyPresent = rows.some((row) => row.category === category);
+          if (!alreadyPresent) {
+            rows.push({
+              category,
+              parent_category: 'Amenities',
+              text: items
+            });
+          }
+        });
+      }
+
+      return {
+        rows,
+        amenityTags: [...amenityTags],
+        counts
+      };
+    }
+
+    function mergeListingDetailRows(primaryRows, secondaryRows) {
+      const merged = [];
+      const seen = new Set();
+
+      [...primaryRows, ...secondaryRows].forEach((row) => {
+        if (!row || typeof row !== 'object' || !Array.isArray(row.text) || row.text.length === 0) {
+          return;
+        }
+        const category = typeof row.category === 'string' ? row.category : 'Details';
+        const parentCategory = typeof row.parent_category === 'string' ? row.parent_category : 'General';
+        const text = [...new Set(row.text.map((item) => normalize(item)).filter(Boolean))];
+        if (text.length === 0) {
+          return;
+        }
+        const key = `${category}::${parentCategory}::${text.join('|')}`;
+        if (seen.has(key)) {
+          return;
+        }
+        seen.add(key);
+        merged.push({
+          category,
+          parent_category: parentCategory,
+          text
+        });
+      });
+
+      return merged;
+    }
+
     function extractAmenityListItemsFromSection(doc, sectionQaid) {
       const selector = `section[data-qaid="${sectionQaid}"] li[data-qaid="listingAmenityListItem"]`;
       return [...doc.querySelectorAll(selector)]
@@ -184,6 +371,7 @@ function ensureForRentEnrichmentBridgeInstalled() {
     function extractTextListingDetails(doc) {
       const rows = [];
       const amenityTags = new Set();
+      let propertyDetailsCount = 0;
 
       const communityFeatureItems = extractAmenityListItemsFromSection(doc, 'communityFeatures');
       if (communityFeatureItems.length > 0) {
@@ -217,6 +405,7 @@ function ensureForRentEnrichmentBridgeInstalled() {
           }
         });
         if (entries.length > 0) {
+          propertyDetailsCount += entries.length;
           rows.push({
             category: 'Property Details',
             parent_category: 'General',
@@ -241,7 +430,13 @@ function ensureForRentEnrichmentBridgeInstalled() {
 
       return {
         rows,
-        amenityTags: [...amenityTags]
+        amenityTags: [...amenityTags],
+        counts: {
+          communityFeatures: communityFeatureItems.length,
+          amenitiesSection: amenityItems.length,
+          propertyDetails: propertyDetailsCount,
+          fallbackAmenities: amenityText.length
+        }
       };
     }
 
@@ -284,11 +479,45 @@ function ensureForRentEnrichmentBridgeInstalled() {
           doc.querySelector('[data-testid*="description"]')?.textContent
         ) ?? null;
 
-      const detailExtraction = extractTextListingDetails(doc);
-      const detailRows = detailExtraction.rows;
+      const embeddedProfileResult = extractEmbeddedForRentProfile(doc);
+      const embeddedProfile = embeddedProfileResult.profile;
+      const embeddedExtraction = embeddedProfile
+        ? extractAmenitiesFromEmbeddedProfile(embeddedProfile)
+        : { rows: [], amenityTags: [], counts: { amenityGroups: 0, communityFeatures: 0, flatAmenities: 0 } };
+      const domExtraction = extractTextListingDetails(doc);
+      const detailRows = mergeListingDetailRows(embeddedExtraction.rows, domExtraction.rows);
+      const amenityTags = [
+        ...new Set([...embeddedExtraction.amenityTags, ...domExtraction.amenityTags].map((item) => normalize(item)).filter(Boolean))
+      ];
+      const amenityExtractionDebug = {
+        embeddedProfileSource: embeddedProfileResult.source,
+        embeddedProfileFound: Boolean(embeddedProfile),
+        htmlHasNextData: Boolean(doc.getElementById('__NEXT_DATA__')),
+        htmlHasAmenityGroupsText: htmlText.includes('"amenityGroups"'),
+        embeddedAmenityGroupItemCount: embeddedExtraction.counts.amenityGroups,
+        embeddedCommunityFeatureCount: embeddedExtraction.counts.communityFeatures,
+        embeddedFlatAmenityCount: embeddedExtraction.counts.flatAmenities,
+        domCommunityFeatureCount: domExtraction.counts.communityFeatures,
+        domAmenitySectionCount: domExtraction.counts.amenitiesSection,
+        domPropertyDetailsCount: domExtraction.counts.propertyDetails,
+        domFallbackAmenityCount: domExtraction.counts.fallbackAmenities,
+        totalListingDetailRows: detailRows.length,
+        totalAmenityTags: amenityTags.length,
+        extractionStrategy:
+          embeddedExtraction.rows.length > 0
+            ? domExtraction.rows.length > 0
+              ? 'embedded-json+dom'
+              : 'embedded-json'
+            : domExtraction.rows.length > 0
+              ? 'dom-only'
+              : 'none'
+      };
+
+      console.info('[house4me/forrent] amenity extraction', listingUrl, amenityExtractionDebug);
+
       const tags = [
         ...new Set(
-          [...detailExtraction.amenityTags, ...detailRows.flatMap((detail) => detail.text || [])]
+          [...amenityTags, ...detailRows.flatMap((detail) => detail.text || [])]
             .map((item) => normalize(item))
             .filter(Boolean)
             .slice(0, 30)
@@ -340,7 +569,12 @@ function ensureForRentEnrichmentBridgeInstalled() {
         listingDetails: detailRows.length > 0 ? detailRows : null,
         fees: feeFromText ? { summary: normalize(feeFromText[1]).slice(0, 240) } : null,
         popularity: null,
-        detailParserSource: structuredData.length > 0 ? 'structured-data' : 'dom-fallback',
+        detailParserSource: embeddedProfile
+          ? embeddedProfileResult.source
+          : structuredData.length > 0
+            ? 'structured-data'
+            : 'dom-fallback',
+        amenityExtractionDebug,
         detailFetchStatus: 'success',
         detailFetchError: null,
         listingUrl
@@ -400,7 +634,15 @@ function ensureForRentEnrichmentBridgeInstalled() {
               completed,
               total,
               listingUrl,
-              detailFetchStatus: detailResult.detailFetchStatus || 'unknown'
+              detailFetchStatus: detailResult.detailFetchStatus || 'unknown',
+              amenityTagCount:
+                detailResult.amenityExtractionDebug && Number.isFinite(detailResult.amenityExtractionDebug.totalAmenityTags)
+                  ? detailResult.amenityExtractionDebug.totalAmenityTags
+                  : null,
+              amenityExtractionStrategy:
+                detailResult.amenityExtractionDebug && typeof detailResult.amenityExtractionDebug.extractionStrategy === 'string'
+                  ? detailResult.amenityExtractionDebug.extractionStrategy
+                  : null
             },
             window.location.origin
           );
@@ -475,12 +717,26 @@ function enrichForRentListingsViaScriptlet(listings) {
         entry && typeof entry === 'object' ? entry.detailFetchStatus : null
       );
       const succeeded = statuses.filter((status) => status === 'success').length;
+      const amenityDiagnostics = mergedListings.reduce(
+        (summary, listing) => {
+          const debug = listing.rawPayload?.amenityExtractionDebug;
+          if (debug && debug.totalAmenityTags > 0) {
+            summary.withAmenities += 1;
+          } else {
+            summary.withoutAmenities += 1;
+          }
+          return summary;
+        },
+        { withAmenities: 0, withoutAmenities: 0 }
+      );
+      console.info('[house4me/forrent] enrichment amenity summary', amenityDiagnostics);
       resolve({
         listings: mergedListings,
         enrichment: {
           attempted: dedupedUrls.length,
           succeeded,
-          failed: dedupedUrls.length - succeeded
+          failed: dedupedUrls.length - succeeded,
+          amenityDiagnostics
         }
       });
     }

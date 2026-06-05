@@ -43,6 +43,70 @@ function getBearerToken(headers: Record<string, string | undefined>): string | n
   return match ? match[1].trim() : null;
 }
 
+function summarizeForRentAmenityDiagnostics(listings: NormalizedListingInput[]): {
+  withListingDetails: number;
+  withAmenityTags: number;
+  withoutAmenityTags: number;
+  samples: Array<{
+    listingUrl: string;
+    listingDetailRowCount: number;
+    amenityTagCount: number | null;
+    extractionStrategy: string | null;
+    embeddedProfileFound: boolean | null;
+  }>;
+} {
+  let withListingDetails = 0;
+  let withAmenityTags = 0;
+
+  for (const listing of listings) {
+    const detailRows = Array.isArray(listing.listingDetails) ? listing.listingDetails : [];
+    if (detailRows.length > 0) {
+      withListingDetails += 1;
+    }
+
+    const rawPayload =
+      listing.rawPayload && typeof listing.rawPayload === 'object'
+        ? (listing.rawPayload as Record<string, unknown>)
+        : null;
+    const debug =
+      rawPayload?.amenityExtractionDebug && typeof rawPayload.amenityExtractionDebug === 'object'
+        ? (rawPayload.amenityExtractionDebug as Record<string, unknown>)
+        : null;
+    const amenityTagCount = typeof debug?.totalAmenityTags === 'number' ? debug.totalAmenityTags : null;
+    const tagCount = amenityTagCount ?? (Array.isArray(listing.tags) ? listing.tags.length : 0);
+    if (tagCount > 0) {
+      withAmenityTags += 1;
+    }
+  }
+
+  const samples = listings.slice(0, 5).map((listing) => {
+    const detailRows = Array.isArray(listing.listingDetails) ? listing.listingDetails : [];
+    const rawPayload =
+      listing.rawPayload && typeof listing.rawPayload === 'object'
+        ? (listing.rawPayload as Record<string, unknown>)
+        : null;
+    const debug =
+      rawPayload?.amenityExtractionDebug && typeof rawPayload.amenityExtractionDebug === 'object'
+        ? (rawPayload.amenityExtractionDebug as Record<string, unknown>)
+        : null;
+
+    return {
+      listingUrl: listing.listingUrl,
+      listingDetailRowCount: detailRows.length,
+      amenityTagCount: typeof debug?.totalAmenityTags === 'number' ? debug.totalAmenityTags : null,
+      extractionStrategy: typeof debug?.extractionStrategy === 'string' ? debug.extractionStrategy : null,
+      embeddedProfileFound: typeof debug?.embeddedProfileFound === 'boolean' ? debug.embeddedProfileFound : null
+    };
+  });
+
+  return {
+    withListingDetails,
+    withAmenityTags,
+    withoutAmenityTags: listings.length - withAmenityTags,
+    samples
+  };
+}
+
 function normalizeIncomingListing(input: unknown): NormalizedListingInput | null {
   if (!input || typeof input !== 'object') {
     return null;
@@ -220,6 +284,16 @@ export const handler: Handler = async (event) => {
 
   try {
     const acceptedListings = [...deduped.values()];
+    const amenityDiagnostics = summarizeForRentAmenityDiagnostics(acceptedListings);
+    console.info(
+      JSON.stringify({
+        event: 'forrent-ingest-amenity-diagnostics',
+        received: parsedBody.listings.length,
+        accepted: acceptedListings.length,
+        ...amenityDiagnostics
+      })
+    );
+
     const upserted = await upsertListingsAndSnapshots(acceptedListings, startedAt, { targetListId });
 
     await supabaseAdmin
@@ -241,7 +315,8 @@ export const handler: Handler = async (event) => {
         accepted: acceptedListings.length,
         rejected: parsedBody.listings.length - acceptedListings.length,
         upserted,
-        imported_to_list: selectedList?.slug ?? MAIN_LIST_SLUG
+        imported_to_list: selectedList?.slug ?? MAIN_LIST_SLUG,
+        amenityDiagnostics
       })
     };
   } catch (error) {
