@@ -47,6 +47,14 @@
   gap: 0.6rem;
 }
 
+button {
+  border: 0;
+  border-radius: 6px;
+  padding: 0.55rem 0.85rem;
+  cursor: pointer;
+  color: #fff;
+}
+
 .like-toggle {
   background: #f59e0b;
 }
@@ -54,6 +62,19 @@
 .like-toggle:disabled {
   background: #fcd34d;
   cursor: not-allowed;
+}
+
+.cross-off {
+  background: #dc2626;
+}
+
+.cross-off:disabled {
+  background: #fca5a5;
+  cursor: not-allowed;
+}
+
+button.ghost {
+  background: #6b7280;
 }
 
 .address {
@@ -171,8 +192,25 @@
   font-size: 1.1rem;
 }
 
+.modal-card label {
+  display: grid;
+  gap: 0.35rem;
+  font-size: 0.9rem;
+}
+
+.modal-card select {
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  padding: 0.55rem;
+}
+
 .modal-actions {
   display: flex;
   justify-content: end;
   gap: 0.5rem;
+}
+
+.modal-error {
+  margin: 0;
+  color: #b91c1c;
 }

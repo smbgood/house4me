@@ -12,6 +12,15 @@
         <button type="button" class="like-toggle" [disabled]="pendingLike" (click)="toggleLike()">
           {{ pendingLike ? 'Saving...' : (listing.is_liked ? 'Unlike listing' : 'Like listing') }}
         </button>
+        <button
+          *ngIf="!listing.is_crossed_off"
+          type="button"
+          class="cross-off"
+          [disabled]="pendingCrossOff"
+          (click)="openCrossOffModal()"
+        >
+          {{ pendingCrossOff ? 'Crossing off...' : 'Cross off' }}
+        </button>
       </div>
     </header>
 
@@ -76,6 +85,29 @@
     </section>
 
     <a [href]="listing.listing_url" target="_blank" rel="noopener noreferrer" class="external-link">Open original listing</a>
+  </section>
+
+  <section *ngIf="showCrossOffModal" class="modal-backdrop" (click)="closeCrossOffModal()">
+    <div class="modal-card" role="dialog" aria-modal="true" (click)="$event.stopPropagation()">
+      <h2>Why are you crossing off this listing?</h2>
+      <label>
+        Reason
+        <select [(ngModel)]="selectedCrossOffReason">
+          <option *ngFor="let option of crossOffReasonOptions" [value]="option.value">
+            {{ option.label }}
+          </option>
+        </select>
+      </label>
+
+      <p *ngIf="crossOffModalError" class="modal-error">{{ crossOffModalError }}</p>
+
+      <div class="modal-actions">
+        <button type="button" class="ghost" (click)="closeCrossOffModal()">Cancel</button>
+        <button type="button" class="cross-off" [disabled]="pendingCrossOff" (click)="confirmCrossOffListing()">
+          {{ pendingCrossOff ? 'Crossing off...' : 'Confirm cross off' }}
+        </button>
+      </div>
+    </div>
   </section>
 
   <section *ngIf="coLikeModalEmails" class="modal-backdrop" (click)="closeCoLikeModal()">
