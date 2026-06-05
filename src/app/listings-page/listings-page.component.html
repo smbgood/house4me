@@ -83,12 +83,9 @@
   <section *ngIf="!loading && !error" class="listings">
     <article class="listing" *ngFor="let listing of listings; trackBy: trackById">
       <div class="listing-main">
-        <h3>{{ listing.title || 'Untitled listing' }}</h3>
+        <a [href]="listing.listing_url" target="_blank" rel="noopener noreferrer"><h3>{{ listing.title || 'Untitled listing' }}</h3></a>
         <p>
-          {{ listing.address }},
-          <a [href]="listing.listing_url" target="_blank" rel="noopener noreferrer">
-            {{ listing.city }}, {{ listing.state }} {{ listing.zip }}
-          </a>
+          {{ listing.address }},{{ listing.city }}, {{ listing.state }} {{ listing.zip }}
         </p>
         <p class="rent">{{ listing.rent_price ? ('$' + listing.rent_price) : 'Price unavailable' }}</p>
         <p>
