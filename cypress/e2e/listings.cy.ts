@@ -166,12 +166,17 @@ describe('Rental aggregator listing filters', () => {
       }
       const id = String((req.body as { id?: string })?.id ?? '');
       const crossOffReason = String((req.body as { crossOffReason?: string })?.crossOffReason ?? '');
+      const crossOffNote = String((req.body as { crossOffNote?: string })?.crossOffNote ?? '');
       const listing = listings.find((item) => item.id === id);
       if (!listing) {
         req.reply({ statusCode: 404, body: { error: 'Listing not found.' } });
         return;
       }
-      expect(crossOffReason).to.eq('did_not_match_requirements');
+      if (crossOffReason === 'other') {
+        expect(crossOffNote).to.not.eq('');
+      } else {
+        expect(crossOffReason).to.eq('did_not_match_requirements');
+      }
       crossedOffIds.add(id);
       req.reply({
         statusCode: 200,
@@ -180,6 +185,7 @@ describe('Rental aggregator listing filters', () => {
             id,
             is_crossed_off: true,
             cross_off_reason: crossOffReason,
+            cross_off_note: crossOffReason === 'other' ? crossOffNote : null,
             crossed_off_by: 'authorized@example.com',
             crossed_off_at: '2026-06-05T12:00:00.000Z'
           }
@@ -276,11 +282,8 @@ describe('Rental aggregator listing filters', () => {
     cy.contains('h2', 'This listing is already liked by others').should('not.exist');
 
     cy.contains('article', 'Parkside Home').within(() => {
-      cy.contains('button', 'Cross off').click();
+      cy.contains('button', 'Did Not Match Requirements').click();
     });
-    cy.contains('h2', 'Why are you crossing off this listing?').should('be.visible');
-    cy.get('.modal-card select').should('have.value', 'did_not_match_requirements');
-    cy.contains('.modal-card button', 'Confirm cross off').click();
     cy.wait('@crossOffListing');
     cy.contains('Parkside Home').should('not.exist');
     cy.get('select').eq(1).select('Any');

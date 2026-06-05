@@ -47,6 +47,11 @@
   gap: 0.6rem;
 }
 
+.reject-actions {
+  display: grid;
+  gap: 0.35rem;
+}
+
 button {
   border: 0;
   border-radius: 6px;
@@ -66,6 +71,10 @@ button {
 
 .cross-off {
   background: #dc2626;
+}
+
+.cross-off.other {
+  background: #7c3aed;
 }
 
 .cross-off:disabled {
@@ -256,6 +265,14 @@ button.ghost {
   border: 1px solid #d1d5db;
   border-radius: 6px;
   padding: 0.55rem;
+}
+
+.modal-card textarea {
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  padding: 0.55rem;
+  font: inherit;
+  resize: vertical;
 }
 
 .transfer-operation-group {

@@ -111,14 +111,25 @@
               : (listing.is_liked ? 'Unlike listing' : 'Like listing')
           }}
         </button>
-        <button
-          type="button"
-          class="cross-off"
-          [disabled]="pendingCrossOffIds.has(listing.id)"
-          (click)="openCrossOffModal(listing.id)"
-        >
-          {{ pendingCrossOffIds.has(listing.id) ? 'Crossing off...' : 'Cross off' }}
-        </button>
+        <div class="reject-actions">
+          <button
+            *ngFor="let option of crossOffReasonOptions"
+            type="button"
+            class="cross-off"
+            [disabled]="pendingCrossOffIds.has(listing.id)"
+            (click)="crossOffListing(listing.id, option.value)"
+          >
+            {{ pendingCrossOffIds.has(listing.id) ? 'Crossing off...' : option.label }}
+          </button>
+          <button
+            type="button"
+            class="cross-off other"
+            [disabled]="pendingCrossOffIds.has(listing.id)"
+            (click)="openCrossOffModal(listing.id)"
+          >
+            {{ pendingCrossOffIds.has(listing.id) ? 'Crossing off...' : 'Other' }}
+          </button>
+        </div>
         <span class="source">{{ formatListingSources(listing) }}</span>
       </div>
     </article>
@@ -128,14 +139,15 @@
 
   <section *ngIf="crossOffModalListingId" class="modal-backdrop" (click)="closeCrossOffModal()">
     <div class="modal-card" role="dialog" aria-modal="true" (click)="$event.stopPropagation()">
-      <h2>Why are you crossing off this listing?</h2>
+      <h2>Add custom reject reason</h2>
       <label>
-        Reason
-        <select [(ngModel)]="selectedCrossOffReason">
-          <option *ngFor="let option of crossOffReasonOptions" [value]="option.value">
-            {{ option.label }}
-          </option>
-        </select>
+        Why is this listing rejected?
+        <textarea
+          [(ngModel)]="crossOffModalNote"
+          rows="4"
+          maxlength="300"
+          placeholder="Example: Great house, but the commute is too long."
+        ></textarea>
       </label>
 
       <p *ngIf="crossOffModalError" class="modal-error">{{ crossOffModalError }}</p>
@@ -146,12 +158,12 @@
           type="button"
           class="cross-off"
           [disabled]="crossOffModalListingId ? pendingCrossOffIds.has(crossOffModalListingId) : false"
-          (click)="confirmCrossOffListing()"
+          (click)="confirmCrossOffListingWithOther()"
         >
           {{
             crossOffModalListingId && pendingCrossOffIds.has(crossOffModalListingId)
               ? 'Crossing off...'
-              : 'Confirm cross off'
+              : 'Submit rejection'
           }}
         </button>
       </div>

@@ -5,6 +5,7 @@ import { ActivatedRoute, Router, RouterModule } from '@angular/router';
 
 import {
   type CrossOffReason,
+  type CrossOffReasonValue,
   type ListingList,
   type ListingTransferOperation,
   type PriceHistoryPoint,
@@ -42,7 +43,7 @@ export class ListingDetailPageComponent implements OnInit {
   transferModalError = '';
   loadingTransferLists = false;
   transferLists: ListingList[] = [];
-  selectedCrossOffReason: CrossOffReason | '' = '';
+  crossOffModalNote = '';
   crossOffModalError = '';
   readonly crossOffReasonOptions: CrossOffReasonOption[] = [
     { value: 'did_not_match_requirements', label: 'Did Not Match Requirements' },
@@ -319,22 +320,18 @@ export class ListingDetailPageComponent implements OnInit {
       return;
     }
     this.showCrossOffModal = true;
-    this.selectedCrossOffReason = this.crossOffReasonOptions[0].value;
+    this.crossOffModalNote = '';
     this.crossOffModalError = '';
   }
 
   closeCrossOffModal(): void {
     this.showCrossOffModal = false;
-    this.selectedCrossOffReason = '';
+    this.crossOffModalNote = '';
     this.crossOffModalError = '';
   }
 
-  async confirmCrossOffListing(): Promise<void> {
+  async crossOffListing(reason: CrossOffReasonValue, note?: string): Promise<void> {
     if (!this.listing || this.pendingCrossOff) {
-      return;
-    }
-    if (!this.selectedCrossOffReason) {
-      this.crossOffModalError = 'Please select a reason before crossing off.';
       return;
     }
 
@@ -342,7 +339,11 @@ export class ListingDetailPageComponent implements OnInit {
     this.error = '';
     this.crossOffModalError = '';
     try {
-      await this.rentalListingsService.crossOffListing(this.listing.id, this.selectedCrossOffReason);
+      await this.rentalListingsService.crossOffListing({
+        id: this.listing.id,
+        reason,
+        note
+      });
       this.closeCrossOffModal();
       await this.router.navigate(['/']);
     } catch (error) {
@@ -350,6 +351,16 @@ export class ListingDetailPageComponent implements OnInit {
     } finally {
       this.pendingCrossOff = false;
     }
+  }
+
+  async confirmCrossOffListingWithOther(): Promise<void> {
+    const note = this.crossOffModalNote.trim();
+    if (!note) {
+      this.crossOffModalError = 'Please enter a reason before crossing off.';
+      return;
+    }
+
+    await this.crossOffListing('other', note);
   }
 
   async toggleLike(): Promise<void> {

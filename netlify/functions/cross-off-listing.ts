@@ -8,6 +8,7 @@ interface CrossOffBody {
   id?: unknown;
   isCrossedOff?: unknown;
   crossOffReason?: unknown;
+  crossOffNote?: unknown;
 }
 
 const CROSS_OFF_REASONS = [
@@ -17,7 +18,8 @@ const CROSS_OFF_REASONS = [
   'no_fence',
   'two_story',
   'no_tub',
-  'too_close_to_neighbors'
+  'too_close_to_neighbors',
+  'other'
 ] as const;
 
 type CrossOffReason = (typeof CROSS_OFF_REASONS)[number];
@@ -113,6 +115,8 @@ export const handler: Handler = async (event) => {
     typeof parsedBody.isCrossedOff === 'boolean' ? parsedBody.isCrossedOff : true;
   const crossOffReasonValue =
     typeof parsedBody.crossOffReason === 'string' ? parsedBody.crossOffReason.trim() : '';
+  const crossOffNote =
+    typeof parsedBody.crossOffNote === 'string' ? parsedBody.crossOffNote.trim() : '';
   const crossOffReason = (
     CROSS_OFF_REASONS as readonly string[]
   ).includes(crossOffReasonValue)
@@ -127,6 +131,15 @@ export const handler: Handler = async (event) => {
       body: JSON.stringify({
         error:
           `Body parameter crossOffReason is required and must be one of: ${CROSS_OFF_REASONS.join(', ')}.`
+      })
+    };
+  }
+  if (isCrossedOff && crossOffReason === 'other' && !crossOffNote) {
+    return {
+      statusCode: 400,
+      headers: defaultHeaders,
+      body: JSON.stringify({
+        error: 'Body parameter crossOffNote is required when crossOffReason is other.'
       })
     };
   }
@@ -206,12 +219,14 @@ export const handler: Handler = async (event) => {
     ? {
         is_crossed_off: true,
         cross_off_reason: crossOffReason,
+        cross_off_note: crossOffReason === 'other' ? crossOffNote : null,
         crossed_off_by: crossedOffBy,
         crossed_off_at: new Date().toISOString()
       }
     : {
         is_crossed_off: false,
         cross_off_reason: null,
+        cross_off_note: null,
         crossed_off_by: null,
         crossed_off_at: null
       };
@@ -219,7 +234,7 @@ export const handler: Handler = async (event) => {
     .from('rental_listings')
     .update(updatePayload)
     .in('id', listingIdsToUpdate)
-    .select('id, is_crossed_off, cross_off_reason, crossed_off_by, crossed_off_at')
+    .select('id, is_crossed_off, cross_off_reason, cross_off_note, crossed_off_by, crossed_off_at')
     .limit(1000);
 
   if (updateResult.error) {

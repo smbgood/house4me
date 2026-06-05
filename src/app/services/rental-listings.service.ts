@@ -34,6 +34,8 @@ export interface RentalListing {
   raw_snippet?: string | null;
   raw_payload?: unknown;
   is_crossed_off?: boolean;
+  cross_off_reason?: string | null;
+  cross_off_note?: string | null;
   is_liked?: boolean;
   status: string;
   last_seen_at: string;
@@ -71,6 +73,7 @@ export interface ListingCrossOffResponse {
     id: string;
     is_crossed_off: boolean;
     cross_off_reason: string | null;
+    cross_off_note?: string | null;
     crossed_off_by: string | null;
     crossed_off_at: string | null;
   };
@@ -84,6 +87,8 @@ export type CrossOffReason =
   | 'two_story'
   | 'no_tub'
   | 'too_close_to_neighbors';
+
+export type CrossOffReasonValue = CrossOffReason | 'other';
 
 export interface ListingLikeResponse {
   listing: {
@@ -181,7 +186,11 @@ export class RentalListingsService {
     return (await response.json()) as ListingResponse;
   }
 
-  async crossOffListing(id: string, crossOffReason: CrossOffReason): Promise<ListingCrossOffResponse> {
+  async crossOffListing(input: {
+    id: string;
+    reason: CrossOffReasonValue;
+    note?: string;
+  }): Promise<ListingCrossOffResponse> {
     const url = `${environment.apiUrl}/cross-off-listing`;
     const refreshToken = this.googleAuthService.getRefreshToken();
     const headers: HeadersInit = {
@@ -192,7 +201,12 @@ export class RentalListingsService {
     const response = await fetch(url, {
       method: 'POST',
       headers,
-      body: JSON.stringify({ id, isCrossedOff: true, crossOffReason })
+      body: JSON.stringify({
+        id: input.id,
+        isCrossedOff: true,
+        crossOffReason: input.reason,
+        ...(input.note ? { crossOffNote: input.note } : {})
+      })
     });
     if (!response.ok) {
       throw new Error(`Failed to cross off listing (${response.status}).`);

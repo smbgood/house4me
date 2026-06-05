@@ -13,15 +13,25 @@
         <button type="button" class="like-toggle" [disabled]="pendingLike" (click)="toggleLike()">
           {{ pendingLike ? 'Saving...' : (listing.is_liked ? 'Unlike listing' : 'Like listing') }}
         </button>
-        <button
-          *ngIf="!listing.is_crossed_off"
-          type="button"
-          class="cross-off"
-          [disabled]="pendingCrossOff"
-          (click)="openCrossOffModal()"
-        >
-          {{ pendingCrossOff ? 'Crossing off...' : 'Cross off' }}
-        </button>
+        <div *ngIf="!listing.is_crossed_off" class="reject-actions">
+          <button
+            *ngFor="let option of crossOffReasonOptions"
+            type="button"
+            class="cross-off"
+            [disabled]="pendingCrossOff"
+            (click)="crossOffListing(option.value)"
+          >
+            {{ pendingCrossOff ? 'Crossing off...' : option.label }}
+          </button>
+          <button
+            type="button"
+            class="cross-off other"
+            [disabled]="pendingCrossOff"
+            (click)="openCrossOffModal()"
+          >
+            {{ pendingCrossOff ? 'Crossing off...' : 'Other' }}
+          </button>
+        </div>
         <button type="button" class="transfer-list" [disabled]="pendingTransfer || loadingTransferLists" (click)="openTransferModal()">
           {{ loadingTransferLists ? 'Loading lists...' : 'Move / Copy list' }}
         </button>
@@ -111,22 +121,23 @@
 
   <section *ngIf="showCrossOffModal" class="modal-backdrop" (click)="closeCrossOffModal()">
     <div class="modal-card" role="dialog" aria-modal="true" (click)="$event.stopPropagation()">
-      <h2>Why are you crossing off this listing?</h2>
+      <h2>Add custom reject reason</h2>
       <label>
-        Reason
-        <select [(ngModel)]="selectedCrossOffReason">
-          <option *ngFor="let option of crossOffReasonOptions" [value]="option.value">
-            {{ option.label }}
-          </option>
-        </select>
+        Why is this listing rejected?
+        <textarea
+          [(ngModel)]="crossOffModalNote"
+          rows="4"
+          maxlength="300"
+          placeholder="Example: Great house, but the commute is too long."
+        ></textarea>
       </label>
 
       <p *ngIf="crossOffModalError" class="modal-error">{{ crossOffModalError }}</p>
 
       <div class="modal-actions">
         <button type="button" class="ghost" (click)="closeCrossOffModal()">Cancel</button>
-        <button type="button" class="cross-off" [disabled]="pendingCrossOff" (click)="confirmCrossOffListing()">
-          {{ pendingCrossOff ? 'Crossing off...' : 'Confirm cross off' }}
+        <button type="button" class="cross-off" [disabled]="pendingCrossOff" (click)="confirmCrossOffListingWithOther()">
+          {{ pendingCrossOff ? 'Crossing off...' : 'Submit rejection' }}
         </button>
       </div>
     </div>

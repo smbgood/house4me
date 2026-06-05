@@ -5,6 +5,7 @@ import { ActivatedRoute, Router, RouterModule } from '@angular/router';
 
 import {
   type CrossOffReason,
+  type CrossOffReasonValue,
   type ListingFilters,
   type ListingList,
   type RentalListing,
@@ -34,8 +35,8 @@ export class ListingsPageComponent implements OnInit {
   pendingCrossOffIds = new Set<string>();
   pendingLikeIds = new Set<string>();
   crossOffModalListingId: string | null = null;
+  crossOffModalNote = '';
   coLikeModalEmails: string[] | null = null;
-  selectedCrossOffReason: CrossOffReason | '' = '';
   crossOffModalError = '';
   readonly crossOffReasonOptions: CrossOffReasonOption[] = [
     { value: 'did_not_match_requirements', label: 'Did Not Match Requirements' },
@@ -131,13 +132,13 @@ export class ListingsPageComponent implements OnInit {
       return;
     }
     this.crossOffModalListingId = id;
-    this.selectedCrossOffReason = this.crossOffReasonOptions[0].value;
+    this.crossOffModalNote = '';
     this.crossOffModalError = '';
   }
 
   closeCrossOffModal(): void {
     this.crossOffModalListingId = null;
-    this.selectedCrossOffReason = '';
+    this.crossOffModalNote = '';
     this.crossOffModalError = '';
   }
 
@@ -145,13 +146,8 @@ export class ListingsPageComponent implements OnInit {
     this.coLikeModalEmails = null;
   }
 
-  async confirmCrossOffListing(): Promise<void> {
-    const id = this.crossOffModalListingId;
+  async crossOffListing(id: string, reason: CrossOffReasonValue, note?: string): Promise<void> {
     if (!id || this.pendingCrossOffIds.has(id)) {
-      return;
-    }
-    if (!this.selectedCrossOffReason) {
-      this.crossOffModalError = 'Please select a reason before crossing off.';
       return;
     }
 
@@ -159,7 +155,7 @@ export class ListingsPageComponent implements OnInit {
     this.error = '';
     this.crossOffModalError = '';
     try {
-      await this.rentalListingsService.crossOffListing(id, this.selectedCrossOffReason);
+      await this.rentalListingsService.crossOffListing({ id, reason, note });
       this.listings = this.listings.filter((listing) => listing.id !== id);
       this.closeCrossOffModal();
     } catch (error) {
@@ -167,6 +163,20 @@ export class ListingsPageComponent implements OnInit {
     } finally {
       this.pendingCrossOffIds.delete(id);
     }
+  }
+
+  async confirmCrossOffListingWithOther(): Promise<void> {
+    const id = this.crossOffModalListingId;
+    const note = this.crossOffModalNote.trim();
+    if (!id || this.pendingCrossOffIds.has(id)) {
+      return;
+    }
+    if (!note) {
+      this.crossOffModalError = 'Please enter a reason before crossing off.';
+      return;
+    }
+
+    await this.crossOffListing(id, 'other', note);
   }
 
   async toggleLikeListing(id: string, isLiked: boolean): Promise<void> {
