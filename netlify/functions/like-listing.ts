@@ -4,6 +4,11 @@ import { createClient } from '@supabase/supabase-js';
 import { verifyGoogleRefreshToken } from './auth';
 import { defaultHeaders, optionsResponse } from './utils/cors';
 
+interface LikeBody {
+  id?: unknown;
+  isLiked?: unknown;
+}
+
 function parseBearerToken(headers: Record<string, string | undefined>): string | null {
   const authHeader = headers['authorization'] ?? headers['Authorization'];
   if (!authHeader) {
@@ -34,7 +39,7 @@ export const handler: Handler = async (event) => {
     return optionsResponse;
   }
 
-  if (event.httpMethod !== 'GET') {
+  if (event.httpMethod !== 'POST') {
     return {
       statusCode: 405,
       headers: defaultHeaders,
@@ -51,20 +56,11 @@ export const handler: Handler = async (event) => {
     };
   }
 
-  const listingId = event.queryStringParameters?.['id']?.trim();
-  if (!listingId) {
-    return {
-      statusCode: 400,
-      headers: defaultHeaders,
-      body: JSON.stringify({ error: 'Query parameter id is required.' })
-    };
-  }
-
   let verification;
   try {
     verification = await verifyGoogleRefreshToken(refreshToken);
   } catch (error) {
-    console.error('Failed to verify Google token for get-listing:', error);
+    console.error('Failed to verify Google token for like-listing:', error);
     return {
       statusCode: 500,
       headers: defaultHeaders,
@@ -72,15 +68,8 @@ export const handler: Handler = async (event) => {
     };
   }
 
-  if (!verification.valid) {
-    return {
-      statusCode: 401,
-      headers: defaultHeaders,
-      body: JSON.stringify({ error: 'Unauthorized.' })
-    };
-  }
   const googleEmail = verification.email?.trim().toLowerCase();
-  if (!googleEmail) {
+  if (!verification.valid || !googleEmail) {
     return {
       statusCode: 401,
       headers: defaultHeaders,
@@ -88,53 +77,70 @@ export const handler: Handler = async (event) => {
     };
   }
 
+  let parsedBody: LikeBody;
+  try {
+    parsedBody = event.body ? (JSON.parse(event.body) as LikeBody) : {};
+  } catch {
+    return {
+      statusCode: 400,
+      headers: defaultHeaders,
+      body: JSON.stringify({ error: 'Invalid JSON body.' })
+    };
+  }
+
+  const id = typeof parsedBody.id === 'string' ? parsedBody.id.trim() : '';
+  if (!id) {
+    return {
+      statusCode: 400,
+      headers: defaultHeaders,
+      body: JSON.stringify({ error: 'Body parameter id is required.' })
+    };
+  }
+
+  const isLiked = typeof parsedBody.isLiked === 'boolean' ? parsedBody.isLiked : true;
   const supabaseAdmin = getSupabaseAdmin();
-  const listingResult = await supabaseAdmin
-    .from('rental_listings')
-    .select(
-      'id, source, source_listing_id, source_property_id, listing_url, image_url, title, address, city, state, zip, rent_price, bedrooms, bathrooms, allows_pets, has_fence, available_date, sqft, description_text, management_company, landlord_name, photo_count, tags, listing_details, fees, popularity, raw_snippet, raw_payload, is_crossed_off, status, last_seen_at, created_at, updated_at'
-    )
-    .eq('id', listingId)
-    .maybeSingle();
 
-  if (listingResult.error) {
-    return {
-      statusCode: 500,
-      headers: defaultHeaders,
-      body: JSON.stringify({ error: listingResult.error.message })
-    };
+  if (isLiked) {
+    const insertResult = await supabaseAdmin.from('user_liked_listings').upsert(
+      {
+        google_email: googleEmail,
+        listing_id: id
+      },
+      {
+        onConflict: 'google_email,listing_id',
+        ignoreDuplicates: true
+      }
+    );
+    if (insertResult.error) {
+      return {
+        statusCode: 500,
+        headers: defaultHeaders,
+        body: JSON.stringify({ error: insertResult.error.message })
+      };
+    }
+  } else {
+    const deleteResult = await supabaseAdmin
+      .from('user_liked_listings')
+      .delete()
+      .eq('google_email', googleEmail)
+      .eq('listing_id', id);
+    if (deleteResult.error) {
+      return {
+        statusCode: 500,
+        headers: defaultHeaders,
+        body: JSON.stringify({ error: deleteResult.error.message })
+      };
+    }
   }
-
-  if (!listingResult.data) {
-    return {
-      statusCode: 404,
-      headers: defaultHeaders,
-      body: JSON.stringify({ error: 'Listing not found.' })
-    };
-  }
-
-  const likeResult = await supabaseAdmin
-    .from('user_liked_listings')
-    .select('listing_id')
-    .eq('google_email', googleEmail)
-    .eq('listing_id', listingId)
-    .maybeSingle();
-  if (likeResult.error) {
-    return {
-      statusCode: 500,
-      headers: defaultHeaders,
-      body: JSON.stringify({ error: likeResult.error.message })
-    };
-  }
-
-  const listingWithLike = {
-    ...listingResult.data,
-    is_liked: Boolean(likeResult.data)
-  };
 
   return {
     statusCode: 200,
     headers: defaultHeaders,
-    body: JSON.stringify({ listing: listingWithLike })
+    body: JSON.stringify({
+      listing: {
+        id,
+        is_liked: isLiked
+      }
+    })
   };
 };

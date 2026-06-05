@@ -8,6 +8,10 @@ interface GoogleTokenResponse {
   error?: string;
 }
 
+interface GoogleUserInfoResponse {
+  email?: string;
+}
+
 function getRequiredEnv(name: string): string {
   const value = process.env[name];
   if (!value) {
@@ -44,7 +48,23 @@ export async function verifyGoogleRefreshToken(refreshToken: string): Promise<Ve
     return { valid: false };
   }
 
+  const userInfoResponse = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+    headers: {
+      Authorization: `Bearer ${tokenData.access_token}`
+    }
+  });
+  if (!userInfoResponse.ok) {
+    return { valid: false };
+  }
+
+  const userInfoData = (await userInfoResponse.json()) as GoogleUserInfoResponse;
+  const email = userInfoData.email?.trim().toLowerCase();
+  if (!email) {
+    return { valid: false };
+  }
+
   return {
-    valid: true
+    valid: true,
+    email
   };
 }

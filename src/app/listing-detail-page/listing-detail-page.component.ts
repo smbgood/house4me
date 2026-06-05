@@ -15,6 +15,7 @@ export class ListingDetailPageComponent implements OnInit {
   listing: RentalListing | null = null;
   loading = false;
   error = '';
+  pendingLike = false;
 
   constructor(
     private readonly route: ActivatedRoute,
@@ -72,5 +73,25 @@ export class ListingDetailPageComponent implements OnInit {
     return Object.entries(value as Record<string, unknown>)
       .map(([key, fieldValue]) => `${key.replace(/_/g, ' ')}: ${String(fieldValue)}`)
       .filter((entry) => entry.trim().length > 0);
+  }
+
+  async toggleLike(): Promise<void> {
+    if (!this.listing || this.pendingLike) {
+      return;
+    }
+
+    this.pendingLike = true;
+    this.error = '';
+    try {
+      const response = await this.rentalListingsService.likeListing(this.listing.id, !this.listing.is_liked);
+      this.listing = {
+        ...this.listing,
+        is_liked: response.listing.is_liked
+      };
+    } catch (error) {
+      this.error = error instanceof Error ? error.message : 'Failed to update listing like.';
+    } finally {
+      this.pendingLike = false;
+    }
   }
 }

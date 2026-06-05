@@ -33,6 +33,7 @@ export interface RentalListing {
   raw_snippet?: string | null;
   raw_payload?: unknown;
   is_crossed_off?: boolean;
+  is_liked?: boolean;
   status: string;
   last_seen_at: string;
   created_at?: string;
@@ -60,6 +61,13 @@ export interface ListingCrossOffResponse {
   listing: {
     id: string;
     is_crossed_off: boolean;
+  };
+}
+
+export interface ListingLikeResponse {
+  listing: {
+    id: string;
+    is_liked: boolean;
   };
 }
 
@@ -140,5 +148,40 @@ export class RentalListingsService {
     }
 
     return (await response.json()) as ListingCrossOffResponse;
+  }
+
+  async likeListing(id: string, isLiked: boolean): Promise<ListingLikeResponse> {
+    const url = `${environment.apiUrl}/like-listing`;
+    const refreshToken = this.googleAuthService.getRefreshToken();
+    const headers: HeadersInit = {
+      'Content-Type': 'application/json',
+      ...(refreshToken ? { Authorization: `Bearer ${refreshToken}` } : {})
+    };
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ id, isLiked })
+    });
+    if (!response.ok) {
+      throw new Error(`Failed to update listing like (${response.status}).`);
+    }
+
+    return (await response.json()) as ListingLikeResponse;
+  }
+
+  async getLikedListings(): Promise<ListingsResponse> {
+    const url = `${environment.apiUrl}/get-liked-listings`;
+    const refreshToken = this.googleAuthService.getRefreshToken();
+    const headers: HeadersInit = refreshToken
+      ? { Authorization: `Bearer ${refreshToken}` }
+      : {};
+
+    const response = await fetch(url, { headers });
+    if (!response.ok) {
+      throw new Error(`Failed to load liked listings (${response.status}).`);
+    }
+
+    return (await response.json()) as ListingsResponse;
   }
 }

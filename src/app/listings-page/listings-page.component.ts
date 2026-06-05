@@ -23,6 +23,7 @@ export class ListingsPageComponent implements OnInit {
   loading = false;
   error = '';
   pendingCrossOffIds = new Set<string>();
+  pendingLikeIds = new Set<string>();
 
   source = '';
   pets: SelectBool = '';
@@ -69,6 +70,25 @@ export class ListingsPageComponent implements OnInit {
       this.error = error instanceof Error ? error.message : 'Failed to cross off listing.';
     } finally {
       this.pendingCrossOffIds.delete(id);
+    }
+  }
+
+  async toggleLikeListing(id: string, isLiked: boolean): Promise<void> {
+    if (this.pendingLikeIds.has(id)) {
+      return;
+    }
+
+    this.pendingLikeIds.add(id);
+    this.error = '';
+    try {
+      const response = await this.rentalListingsService.likeListing(id, !isLiked);
+      this.listings = this.listings.map((listing) =>
+        listing.id === id ? { ...listing, is_liked: response.listing.is_liked } : listing
+      );
+    } catch (error) {
+      this.error = error instanceof Error ? error.message : 'Failed to update listing like.';
+    } finally {
+      this.pendingLikeIds.delete(id);
     }
   }
 

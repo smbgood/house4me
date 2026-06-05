@@ -51,20 +51,11 @@ export const handler: Handler = async (event) => {
     };
   }
 
-  const listingId = event.queryStringParameters?.['id']?.trim();
-  if (!listingId) {
-    return {
-      statusCode: 400,
-      headers: defaultHeaders,
-      body: JSON.stringify({ error: 'Query parameter id is required.' })
-    };
-  }
-
   let verification;
   try {
     verification = await verifyGoogleRefreshToken(refreshToken);
   } catch (error) {
-    console.error('Failed to verify Google token for get-listing:', error);
+    console.error('Failed to verify Google token for get-liked-listings:', error);
     return {
       statusCode: 500,
       headers: defaultHeaders,
@@ -72,15 +63,8 @@ export const handler: Handler = async (event) => {
     };
   }
 
-  if (!verification.valid) {
-    return {
-      statusCode: 401,
-      headers: defaultHeaders,
-      body: JSON.stringify({ error: 'Unauthorized.' })
-    };
-  }
   const googleEmail = verification.email?.trim().toLowerCase();
-  if (!googleEmail) {
+  if (!verification.valid || !googleEmail) {
     return {
       statusCode: 401,
       headers: defaultHeaders,
@@ -89,52 +73,55 @@ export const handler: Handler = async (event) => {
   }
 
   const supabaseAdmin = getSupabaseAdmin();
-  const listingResult = await supabaseAdmin
+  const likesResult = await supabaseAdmin
+    .from('user_liked_listings')
+    .select('listing_id, created_at')
+    .eq('google_email', googleEmail)
+    .order('created_at', { ascending: false })
+    .limit(250);
+  if (likesResult.error) {
+    return {
+      statusCode: 500,
+      headers: defaultHeaders,
+      body: JSON.stringify({ error: likesResult.error.message })
+    };
+  }
+
+  const likedRows = likesResult.data ?? [];
+  const listingIds = likedRows.map((row) => row.listing_id).filter((id): id is string => typeof id === 'string');
+  if (listingIds.length === 0) {
+    return {
+      statusCode: 200,
+      headers: defaultHeaders,
+      body: JSON.stringify({ listings: [] })
+    };
+  }
+
+  const listingsResult = await supabaseAdmin
     .from('rental_listings')
     .select(
-      'id, source, source_listing_id, source_property_id, listing_url, image_url, title, address, city, state, zip, rent_price, bedrooms, bathrooms, allows_pets, has_fence, available_date, sqft, description_text, management_company, landlord_name, photo_count, tags, listing_details, fees, popularity, raw_snippet, raw_payload, is_crossed_off, status, last_seen_at, created_at, updated_at'
+      'id, source, listing_url, image_url, title, address, city, state, zip, rent_price, bedrooms, bathrooms, allows_pets, has_fence, available_date, sqft, management_company, landlord_name, photo_count, is_crossed_off, status, last_seen_at'
     )
-    .eq('id', listingId)
-    .maybeSingle();
-
-  if (listingResult.error) {
+    .eq('status', 'active')
+    .eq('is_crossed_off', false)
+    .in('id', listingIds);
+  if (listingsResult.error) {
     return {
       statusCode: 500,
       headers: defaultHeaders,
-      body: JSON.stringify({ error: listingResult.error.message })
+      body: JSON.stringify({ error: listingsResult.error.message })
     };
   }
 
-  if (!listingResult.data) {
-    return {
-      statusCode: 404,
-      headers: defaultHeaders,
-      body: JSON.stringify({ error: 'Listing not found.' })
-    };
-  }
-
-  const likeResult = await supabaseAdmin
-    .from('user_liked_listings')
-    .select('listing_id')
-    .eq('google_email', googleEmail)
-    .eq('listing_id', listingId)
-    .maybeSingle();
-  if (likeResult.error) {
-    return {
-      statusCode: 500,
-      headers: defaultHeaders,
-      body: JSON.stringify({ error: likeResult.error.message })
-    };
-  }
-
-  const listingWithLike = {
-    ...listingResult.data,
-    is_liked: Boolean(likeResult.data)
-  };
+  const listingById = new Map((listingsResult.data ?? []).map((listing) => [listing.id, listing]));
+  const orderedListings = listingIds
+    .map((id) => listingById.get(id))
+    .filter((listing): listing is NonNullable<typeof listing> => Boolean(listing))
+    .map((listing) => ({ ...listing, is_liked: true }));
 
   return {
     statusCode: 200,
     headers: defaultHeaders,
-    body: JSON.stringify({ listing: listingWithLike })
+    body: JSON.stringify({ listings: orderedListings })
   };
 };

@@ -14,6 +14,11 @@
   margin-bottom: 0.25rem;
 }
 
+.liked-link {
+  display: inline-block;
+  margin-top: 0.35rem;
+}
+
 .filters {
   margin-top: 1rem;
   display: grid;
@@ -117,6 +122,15 @@ button.ghost {
 
 .listing-side .cross-off {
   background: #dc2626;
+}
+
+.listing-side .like-toggle {
+  background: #f59e0b;
+}
+
+.listing-side .like-toggle:disabled {
+  background: #fcd34d;
+  cursor: not-allowed;
 }
 
 .listing-side .cross-off:disabled {

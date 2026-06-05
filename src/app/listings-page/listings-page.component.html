@@ -2,6 +2,7 @@
   <header class="page-header">
     <h1>House4Me Rental Aggregator</h1>
     <p>View Zillow, Trulia, ForRent, and Realtor.com listings in one place.</p>
+    <a routerLink="/liked-listings" class="liked-link">View liked listings</a>
   </header>
 
   <section class="filters">
@@ -78,6 +79,18 @@
       <div class="listing-side">
         <span class="source">{{ listing.source | titlecase }}</span>
         <a [href]="listing.listing_url" target="_blank" rel="noopener noreferrer">Open listing</a>
+        <button
+          type="button"
+          class="like-toggle"
+          [disabled]="pendingLikeIds.has(listing.id)"
+          (click)="toggleLikeListing(listing.id, !!listing.is_liked)"
+        >
+          {{
+            pendingLikeIds.has(listing.id)
+              ? 'Saving...'
+              : (listing.is_liked ? 'Unlike listing' : 'Like listing')
+          }}
+        </button>
         <button
           type="button"
           class="cross-off"

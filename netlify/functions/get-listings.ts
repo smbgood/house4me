@@ -91,6 +91,14 @@ export const handler: Handler = async (event) => {
       body: JSON.stringify({ error: 'Unauthorized.' })
     };
   }
+  const googleEmail = verification.email?.trim().toLowerCase();
+  if (!googleEmail) {
+    return {
+      statusCode: 401,
+      headers: defaultHeaders,
+      body: JSON.stringify({ error: 'Unauthorized.' })
+    };
+  }
 
   const supabaseAdmin = getSupabaseAdmin();
 
@@ -144,6 +152,33 @@ export const handler: Handler = async (event) => {
     return haystack.includes(q);
   });
 
+  const listingIds = filteredListings.map((listing) => listing.id);
+  const likedIds = new Set<string>();
+  if (listingIds.length > 0) {
+    const likesResult = await supabaseAdmin
+      .from('user_liked_listings')
+      .select('listing_id')
+      .eq('google_email', googleEmail)
+      .in('listing_id', listingIds);
+    if (likesResult.error) {
+      return {
+        statusCode: 500,
+        headers: defaultHeaders,
+        body: JSON.stringify({ error: likesResult.error.message })
+      };
+    }
+    for (const row of likesResult.data ?? []) {
+      if (typeof row.listing_id === 'string') {
+        likedIds.add(row.listing_id);
+      }
+    }
+  }
+
+  const listingsWithLikes = filteredListings.map((listing) => ({
+    ...listing,
+    is_liked: likedIds.has(listing.id)
+  }));
+
   const syncStatusResult = await supabaseAdmin
     .from('source_sync_runs')
     .select('source, status, completed_at, listings_found, listings_upserted, error_summary')
@@ -154,7 +189,7 @@ export const handler: Handler = async (event) => {
     statusCode: 200,
     headers: defaultHeaders,
     body: JSON.stringify({
-      listings: filteredListings,
+      listings: listingsWithLikes,
       syncStatus: syncStatusResult.data ?? []
     })
   };

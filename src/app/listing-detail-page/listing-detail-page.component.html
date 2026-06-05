@@ -7,7 +7,12 @@
   <section *ngIf="!loading && !error && listing" class="detail-card">
     <header class="detail-header">
       <h1>{{ listing.title || 'Untitled listing' }}</h1>
-      <span class="source">{{ listing.source | titlecase }}</span>
+      <div class="header-actions">
+        <span class="source">{{ listing.source | titlecase }}</span>
+        <button type="button" class="like-toggle" [disabled]="pendingLike" (click)="toggleLike()">
+          {{ pendingLike ? 'Saving...' : (listing.is_liked ? 'Unlike listing' : 'Like listing') }}
+        </button>
+      </div>
     </header>
 
     <p class="address">{{ listing.address }}, {{ listing.city }}, {{ listing.state }} {{ listing.zip }}</p>
