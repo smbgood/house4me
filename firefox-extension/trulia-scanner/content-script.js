@@ -174,8 +174,37 @@ function ensureForRentEnrichmentBridgeInstalled() {
       return [objectValue];
     }
 
+    function extractAmenityListItemsFromSection(doc, sectionQaid) {
+      const selector = `section[data-qaid="${sectionQaid}"] li[data-qaid="listingAmenityListItem"]`;
+      return [...doc.querySelectorAll(selector)]
+        .map((element) => normalize(element.textContent))
+        .filter(Boolean);
+    }
+
     function extractTextListingDetails(doc) {
       const rows = [];
+      const amenityTags = new Set();
+
+      const communityFeatureItems = extractAmenityListItemsFromSection(doc, 'communityFeatures');
+      if (communityFeatureItems.length > 0) {
+        communityFeatureItems.forEach((item) => amenityTags.add(item));
+        rows.push({
+          category: 'Community Features',
+          parent_category: 'Amenities',
+          text: communityFeatureItems
+        });
+      }
+
+      const amenityItems = extractAmenityListItemsFromSection(doc, 'amenities');
+      if (amenityItems.length > 0) {
+        amenityItems.forEach((item) => amenityTags.add(item));
+        rows.push({
+          category: 'Amenities',
+          parent_category: 'Amenities',
+          text: amenityItems
+        });
+      }
+
       doc.querySelectorAll('dl').forEach((dl) => {
         const entries = [];
         const terms = dl.querySelectorAll('dt');
@@ -199,16 +228,21 @@ function ensureForRentEnrichmentBridgeInstalled() {
       const amenityText = [...doc.querySelectorAll('[class*="amenit"], [data-testid*="amenit"] li, [aria-label*="amenit"] li')]
         .map((element) => normalize(element.textContent))
         .filter(Boolean)
+        .filter((item) => !amenityTags.has(item))
         .slice(0, 30);
       if (amenityText.length > 0) {
+        amenityText.forEach((item) => amenityTags.add(item));
         rows.push({
-          category: 'Amenities',
+          category: 'Amenities (Fallback)',
           parent_category: 'General',
           text: amenityText
         });
       }
 
-      return rows;
+      return {
+        rows,
+        amenityTags: [...amenityTags]
+      };
     }
 
     function parseForRentDetail(htmlText, listingUrl) {
@@ -250,11 +284,11 @@ function ensureForRentEnrichmentBridgeInstalled() {
           doc.querySelector('[data-testid*="description"]')?.textContent
         ) ?? null;
 
-      const detailRows = extractTextListingDetails(doc);
+      const detailExtraction = extractTextListingDetails(doc);
+      const detailRows = detailExtraction.rows;
       const tags = [
         ...new Set(
-          detailRows
-            .flatMap((detail) => detail.text || [])
+          [...detailExtraction.amenityTags, ...detailRows.flatMap((detail) => detail.text || [])]
             .map((item) => normalize(item))
             .filter(Boolean)
             .slice(0, 30)
