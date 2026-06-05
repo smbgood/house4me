@@ -1,4 +1,4 @@
-/* global browser */
+/* global browser, House4MeConfig */
 
 const statusEl = document.getElementById('status');
 const scanButton = document.getElementById('scanButton');
@@ -10,35 +10,21 @@ function setStatus(message) {
 
 async function getSettings() {
   const values = await browser.storage.local.get([
-    'ingestUrl',
     'ingestToken',
-    'truliaIngestUrl',
     'truliaIngestToken',
-    'forrentIngestUrl',
     'forrentIngestToken',
-    'zillowIngestUrl',
     'zillowIngestToken',
-    'realtorIngestUrl',
     'realtorIngestToken'
   ]);
   return {
-    truliaIngestUrl:
-      typeof values.truliaIngestUrl === 'string'
-        ? values.truliaIngestUrl.trim()
-        : typeof values.ingestUrl === 'string'
-          ? values.ingestUrl.trim()
-          : '',
     truliaIngestToken:
       typeof values.truliaIngestToken === 'string'
         ? values.truliaIngestToken.trim()
         : typeof values.ingestToken === 'string'
           ? values.ingestToken.trim()
           : '',
-    forrentIngestUrl: typeof values.forrentIngestUrl === 'string' ? values.forrentIngestUrl.trim() : '',
     forrentIngestToken: typeof values.forrentIngestToken === 'string' ? values.forrentIngestToken.trim() : '',
-    zillowIngestUrl: typeof values.zillowIngestUrl === 'string' ? values.zillowIngestUrl.trim() : '',
     zillowIngestToken: typeof values.zillowIngestToken === 'string' ? values.zillowIngestToken.trim() : '',
-    realtorIngestUrl: typeof values.realtorIngestUrl === 'string' ? values.realtorIngestUrl.trim() : '',
     realtorIngestToken: typeof values.realtorIngestToken === 'string' ? values.realtorIngestToken.trim() : ''
   };
 }
@@ -72,14 +58,6 @@ async function scanCurrentPage() {
     return;
   }
 
-  const ingestUrl =
-    source === 'trulia'
-      ? settings.truliaIngestUrl
-      : source === 'forrent'
-        ? settings.forrentIngestUrl
-        : source === 'zillow'
-          ? settings.zillowIngestUrl
-          : settings.realtorIngestUrl;
   const ingestToken =
     source === 'trulia'
       ? settings.truliaIngestToken
@@ -88,8 +66,8 @@ async function scanCurrentPage() {
         : source === 'zillow'
           ? settings.zillowIngestToken
           : settings.realtorIngestToken;
-  if (!ingestUrl || !ingestToken) {
-    setStatus(`Missing ${source} ingest URL/token. Open options and configure them first.`);
+  if (!ingestToken) {
+    setStatus(`Missing ${source} ingest token. Open options and configure it first.`);
     return;
   }
 
@@ -118,7 +96,7 @@ async function scanCurrentPage() {
 
   setStatus(`Found ${scanResult.listings.length} ${source} listings. Sending...`);
   try {
-    const response = await fetch(ingestUrl, {
+    const response = await fetch(House4MeConfig.getIngestUrl(source), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

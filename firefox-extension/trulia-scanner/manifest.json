@@ -9,8 +9,7 @@
     "*://*.forrent.com/*",
     "*://*.zillow.com/*",
     "*://*.realtor.com/*",
-    "http://localhost:9999/*",
-    "https://*.netlify.app/*"
+    "https://house4me.netlify.app/*"
   ],
   "action": {
     "default_title": "Rental Scanner",

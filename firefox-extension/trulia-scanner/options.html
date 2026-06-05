@@ -9,51 +9,18 @@
   <body>
     <main>
       <h1>House4Me Rental Scanner Settings</h1>
+      <p class="endpoint-info">
+        Listings are sent to <code id="ingestBaseUrl"></code> with source-specific ingest paths.
+      </p>
       <form id="settingsForm">
-        <label for="truliaIngestUrl">Trulia Ingest URL</label>
-        <input
-          id="truliaIngestUrl"
-          name="truliaIngestUrl"
-          type="url"
-          required
-          placeholder="https://your-site.netlify.app/.netlify/functions/ingest-trulia-listings"
-        />
-
         <label for="truliaIngestToken">Trulia Ingest Token</label>
         <input id="truliaIngestToken" name="truliaIngestToken" type="password" required />
-
-        <label for="forrentIngestUrl">ForRent Ingest URL</label>
-        <input
-          id="forrentIngestUrl"
-          name="forrentIngestUrl"
-          type="url"
-          required
-          placeholder="https://your-site.netlify.app/.netlify/functions/ingest-forrent-listings"
-        />
 
         <label for="forrentIngestToken">ForRent Ingest Token</label>
         <input id="forrentIngestToken" name="forrentIngestToken" type="password" required />
 
-        <label for="zillowIngestUrl">Zillow Ingest URL</label>
-        <input
-          id="zillowIngestUrl"
-          name="zillowIngestUrl"
-          type="url"
-          required
-          placeholder="https://your-site.netlify.app/.netlify/functions/ingest-zillow-listings"
-        />
-
         <label for="zillowIngestToken">Zillow Ingest Token</label>
         <input id="zillowIngestToken" name="zillowIngestToken" type="password" required />
-
-        <label for="realtorIngestUrl">Realtor.com Ingest URL</label>
-        <input
-          id="realtorIngestUrl"
-          name="realtorIngestUrl"
-          type="url"
-          required
-          placeholder="https://your-site.netlify.app/.netlify/functions/ingest-realtor-listings"
-        />
 
         <label for="realtorIngestToken">Realtor.com Ingest Token</label>
         <input id="realtorIngestToken" name="realtorIngestToken" type="password" required />
@@ -62,6 +29,7 @@
       </form>
       <p id="status"></p>
     </main>
+    <script src="config.js"></script>
     <script src="options.js"></script>
   </body>
 </html>

@@ -34,6 +34,11 @@ button {
   cursor: pointer;
 }
 
+.endpoint-info {
+  margin-bottom: 16px;
+  color: #444;
+}
+
 #status {
   min-height: 20px;
   margin-top: 12px;
