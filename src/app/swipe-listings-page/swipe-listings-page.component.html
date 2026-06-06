@@ -1,0 +1,88 @@
+<main class="page">
+  <header class="page-header">
+    <h1>Swipe Listings</h1>
+    <p>Review houses one at a time and swipe right to like or left to pass.</p>
+    <div class="header-links">
+      <a routerLink="/">Back to all listings</a>
+      <a routerLink="/liked-listings">View liked listings</a>
+    </div>
+  </header>
+
+  <section *ngIf="loading" class="state">Loading listings...</section>
+  <section *ngIf="error" class="state error">
+    {{ error }}
+    <button type="button" class="ghost" (click)="retry()">Retry</button>
+  </section>
+
+  <section *ngIf="!loading && !error && currentListing" class="swipe-board">
+    <article
+      class="listing-card"
+      [class.pending]="pendingAction"
+      [style.transform]="cardTransform"
+      [class.card-transition]="activePointerId === null"
+      (pointerdown)="onPointerDown($event)"
+      (pointermove)="onPointerMove($event)"
+      (pointerup)="onPointerUp($event)"
+      (pointercancel)="onPointerUp($event)"
+    >
+      <div class="swipe-badge like" [class.visible]="showLikeOverlay || exitDirection === 'right'">LIKE</div>
+      <div class="swipe-badge nope" [class.visible]="showNopeOverlay || exitDirection === 'left'">NOPE</div>
+
+      <div class="listing-media">
+        <img
+          *ngIf="currentListing.image_url; else listingImageFallback"
+          [src]="currentListing.image_url"
+          [alt]="currentListing.title || 'Listing photo'"
+          loading="lazy"
+          decoding="async"
+        />
+        <ng-template #listingImageFallback>
+          <div class="listing-media-placeholder">No image</div>
+        </ng-template>
+      </div>
+
+      <div class="listing-details">
+        <h2>{{ currentListing.title || 'Untitled listing' }}</h2>
+        <p class="rent">{{ rentText }}</p>
+        <p *ngIf="sqftText" class="sqft">{{ sqftText }}</p>
+        <a [href]="currentListing.listing_url" target="_blank" rel="noopener noreferrer">Open original listing</a>
+      </div>
+    </article>
+
+    <div class="action-row">
+      <button type="button" class="pass" [disabled]="pendingAction" (click)="passCurrentListing()">
+        {{ pendingAction ? 'Saving...' : 'Pass' }}
+      </button>
+      <button type="button" class="like" [disabled]="pendingAction" (click)="likeCurrentListing()">
+        {{ pendingAction ? 'Saving...' : 'Like' }}
+      </button>
+    </div>
+
+    <p class="hint">Tip: You can also use ArrowLeft and ArrowRight keys.</p>
+  </section>
+
+  <section *ngIf="!loading && !error && !currentListing && refetching" class="state">Loading more listings...</section>
+
+  <section *ngIf="!loading && !error && !currentListing && exhausted && !refetching" class="state empty-state">
+    <p>No more listings to review right now.</p>
+    <div class="empty-actions">
+      <a routerLink="/">Back to browse</a>
+      <a routerLink="/liked-listings">Go to liked listings</a>
+      <button type="button" class="ghost" (click)="retry()">Refresh listings</button>
+    </div>
+  </section>
+
+  <section *ngIf="coLikeModalEmails" class="modal-backdrop" (click)="closeCoLikeModal()">
+    <div class="modal-card" role="dialog" aria-modal="true" (click)="$event.stopPropagation()">
+      <h2>This listing is already liked by others</h2>
+      <p>The following users have already liked this listing:</p>
+      <ul>
+        <li *ngFor="let email of coLikeModalEmails">{{ email }}</li>
+      </ul>
+
+      <div class="modal-actions">
+        <button type="button" class="ghost" (click)="closeCoLikeModal()">Dismiss</button>
+      </div>
+    </div>
+  </section>
+</main>
