@@ -10,12 +10,26 @@
 
   <section *ngIf="!loading && !error" class="listings">
     <article class="listing" *ngFor="let listing of listings; trackBy: trackById">
-      <div class="listing-main">
-        <h3>
-          <a [routerLink]="['/listings', listing.id]">{{ listing.title || 'Untitled listing' }}</a>
-        </h3>
-        <p>{{ listing.address }}, {{ listing.city }}, {{ listing.state }} {{ listing.zip }}</p>
-        <p class="rent">{{ listing.rent_price ? ('$' + listing.rent_price) : 'Price unavailable' }}</p>
+      <div class="listing-content">
+        <div class="listing-media">
+          <img
+            *ngIf="listing.image_url; else listingImageFallback"
+            [src]="listing.image_url"
+            [alt]="listing.title || 'Listing photo'"
+            loading="lazy"
+            decoding="async"
+          />
+          <ng-template #listingImageFallback>
+            <div class="listing-media-placeholder">No image</div>
+          </ng-template>
+        </div>
+        <div class="listing-main">
+          <h3>
+            <a [routerLink]="['/listings', listing.id]">{{ listing.title || 'Untitled listing' }}</a>
+          </h3>
+          <p>{{ listing.address }}, {{ listing.city }}, {{ listing.state }} {{ listing.zip }}</p>
+          <p class="rent">{{ listing.rent_price ? ('$' + listing.rent_price) : 'Price unavailable' }}</p>
+        </div>
       </div>
       <div class="listing-side">
         <span class="source">{{ formatListingSources(listing) }}</span>
