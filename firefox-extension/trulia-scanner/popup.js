@@ -10,6 +10,10 @@ const createListButton = document.getElementById('createListButton');
 
 const MAIN_LIST_SLUG = 'main';
 const LISTS_STORAGE_KEY = 'selectedImportListSlug';
+const MESSAGE_TARGET_BACKGROUND = 'house4me-background';
+const MESSAGE_TARGET_POPUP = 'house4me-popup';
+const GET_ENRICHMENT_EVENT_MESSAGE_TYPE = 'HOUSE4ME_GET_ENRICHMENT_EVENT';
+const ENRICHMENT_START_TYPES = new Set(['FORRENT_ENRICH_STARTED', 'TRULIA_ENRICH_STARTED']);
 
 let currentSource = null;
 let currentLists = [{ slug: MAIN_LIST_SLUG, name: 'Main' }];
@@ -306,6 +310,30 @@ Ingest w/o Amenities: ${payload.amenityDiagnostics.withoutAmenityTags ?? '?'}`
   );
 }
 
+async function requestLatestEnrichmentEvent(jobId) {
+  try {
+    return await browser.runtime.sendMessage({
+      type: GET_ENRICHMENT_EVENT_MESSAGE_TYPE,
+      target: MESSAGE_TARGET_BACKGROUND,
+      jobId
+    });
+  } catch {
+    return null;
+  }
+}
+
+function syncActiveJobProgressFromBackground() {
+  if (!activeEnrichmentJob?.jobId) {
+    return;
+  }
+  void requestLatestEnrichmentEvent(activeEnrichmentJob.jobId).then((result) => {
+    if (!result?.ok || !result.event) {
+      return;
+    }
+    handleEnrichmentMessage(result.event);
+  });
+}
+
 async function scanCurrentPage() {
   if (activeEnrichmentJob) {
     const sourceLabel = activeEnrichmentJob.source === 'forrent' ? 'ForRent' : 'Trulia';
@@ -413,6 +441,7 @@ Starting detail enrichment in background...`);
     setStatus(`Scanning ${sourceLabel} page and enriching detail pages...
 Progress: 0/${activeEnrichmentJob.total}
 Rate limit: 1 request every 3000 ms`);
+    syncActiveJobProgressFromBackground();
   } finally {
     if (!activeEnrichmentJob) {
       scanButton.disabled = false;
@@ -420,12 +449,11 @@ Rate limit: 1 request every 3000 ms`);
   }
 }
 
-browser.runtime.onMessage.addListener((message) => {
+function handleEnrichmentMessage(message) {
   if (!message) {
     return;
   }
-  const startTypes = new Set(['FORRENT_ENRICH_STARTED', 'TRULIA_ENRICH_STARTED']);
-  if (!activeEnrichmentJob && !startTypes.has(message.type)) {
+  if (!activeEnrichmentJob && !ENRICHMENT_START_TYPES.has(message.type)) {
     return;
   }
 
@@ -494,6 +522,16 @@ Preparing ingest request...`);
     .finally(() => {
       scanButton.disabled = false;
     });
+}
+
+browser.runtime.onMessage.addListener((message) => {
+  if (!message) {
+    return;
+  }
+  if (message.target && message.target !== MESSAGE_TARGET_POPUP) {
+    return;
+  }
+  handleEnrichmentMessage(message);
 });
 
 scanButton.addEventListener('click', () => {

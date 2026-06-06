@@ -20,6 +20,7 @@ const FORRENT_ENRICHMENT_TIMEOUT_BUFFER_MS = 30000;
 const TRULIA_DETAIL_DELAY_MS = 3000;
 const TRULIA_DETAIL_TIMEOUT_MS = 15000;
 const TRULIA_ENRICHMENT_TIMEOUT_BUFFER_MS = 30000;
+const MESSAGE_TARGET_BACKGROUND = 'house4me-background';
 
 let activeForRentJobId = null;
 let activeTruliaJobId = null;
@@ -158,11 +159,13 @@ function calculateTruliaEnrichmentTimeoutMs(totalListings) {
 }
 
 function safeSendRuntimeMessage(message) {
-  try {
-    browser.runtime.sendMessage(message);
-  } catch {
-    // Popup may not be open; ignore failures.
+  const payload = isObject(message) ? { ...message, target: MESSAGE_TARGET_BACKGROUND } : null;
+  if (!payload) {
+    return;
   }
+  void browser.runtime.sendMessage(payload).catch(() => {
+    // Background script may be unavailable during reload; ignore failures.
+  });
 }
 
 function ensureForRentEnrichmentBridgeInstalled() {
