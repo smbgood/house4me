@@ -199,7 +199,8 @@ export class SwipeListingsPageComponent implements OnInit {
 
     try {
       const response = await this.rentalListingsService.getListings({ list: 'main' });
-      this.queue = this.shuffle(response.listings ?? []);
+      const listingsWithImages = (response.listings ?? []).filter((listing) => this.hasImage(listing));
+      this.queue = this.shuffle(listingsWithImages);
       this.exhausted = this.queue.length === 0;
       this.dragOffsetX = 0;
       this.dragRotation = 0;
@@ -210,6 +211,10 @@ export class SwipeListingsPageComponent implements OnInit {
       this.loading = false;
       this.refetching = false;
     }
+  }
+
+  private hasImage(listing: RentalListing): boolean {
+    return typeof listing.image_url === 'string' && listing.image_url.trim().length > 0;
   }
 
   private shuffle(listings: RentalListing[]): RentalListing[] {
