@@ -170,11 +170,13 @@ function ensureForRentEnrichmentBridgeInstalled() {
     return;
   }
 
-  function installBridge() {
+  function installBridge(config = {}) {
     if (window.__house4meForRentBridgeInstalled) {
       return;
     }
     window.__house4meForRentBridgeInstalled = true;
+    const detailTimeoutMs = Number.isFinite(config.detailTimeoutMs) ? config.detailTimeoutMs : 15000;
+    const detailDelayMs = Number.isFinite(config.detailDelayMs) ? config.detailDelayMs : 3000;
 
     function normalize(value) {
       return (value ?? '').replace(/\s+/g, ' ').trim();
@@ -680,7 +682,7 @@ function ensureForRentEnrichmentBridgeInstalled() {
       const detailByUrl = {};
       const total = listingUrls.length;
       let completed = 0;
-      const timeoutMs = FORRENT_DETAIL_TIMEOUT_MS;
+      const timeoutMs = detailTimeoutMs;
 
       function delay(ms) {
         return new Promise((resolve) => {
@@ -725,7 +727,7 @@ function ensureForRentEnrichmentBridgeInstalled() {
         );
 
         if (index < listingUrls.length - 1) {
-          await delay(FORRENT_DETAIL_DELAY_MS);
+          await delay(detailDelayMs);
         }
       }
 
@@ -760,7 +762,10 @@ function ensureForRentEnrichmentBridgeInstalled() {
 
   const script = document.createElement('script');
   script.id = FORRENT_BRIDGE_SCRIPT_ID;
-  script.textContent = `(${installBridge.toString()})();`;
+  script.textContent = `(${installBridge.toString()})(${JSON.stringify({
+    detailDelayMs: FORRENT_DETAIL_DELAY_MS,
+    detailTimeoutMs: FORRENT_DETAIL_TIMEOUT_MS
+  })});`;
   (document.head || document.documentElement || document.body).appendChild(script);
   script.remove();
 }
@@ -934,11 +939,16 @@ function ensureTruliaEnrichmentBridgeInstalled() {
     return;
   }
 
-  function installBridge() {
+  function installBridge(config = {}) {
     if (window.__house4meTruliaBridgeInstalled) {
       return;
     }
     window.__house4meTruliaBridgeInstalled = true;
+    const bridgeRequestType = typeof config.requestType === 'string' ? config.requestType : 'HOUSE4ME_TRULIA_ENRICH_REQUEST';
+    const bridgeResponseType = typeof config.responseType === 'string' ? config.responseType : 'HOUSE4ME_TRULIA_ENRICH_RESPONSE';
+    const bridgeProgressType = typeof config.progressType === 'string' ? config.progressType : 'HOUSE4ME_TRULIA_ENRICH_PROGRESS';
+    const detailTimeoutMs = Number.isFinite(config.detailTimeoutMs) ? config.detailTimeoutMs : 15000;
+    const detailDelayMs = Number.isFinite(config.detailDelayMs) ? config.detailDelayMs : 3000;
 
     function normalize(value) {
       return (value ?? '').replace(/\s+/g, ' ').trim();
@@ -1247,7 +1257,7 @@ function ensureTruliaEnrichmentBridgeInstalled() {
         const listingUrl = listingUrls[index];
         let detailResult;
         try {
-          const htmlText = await fetchDetailWithTimeout(listingUrl, TRULIA_DETAIL_TIMEOUT_MS);
+          const htmlText = await fetchDetailWithTimeout(listingUrl, detailTimeoutMs);
           detailResult = parseTruliaDetail(htmlText, listingUrl);
         } catch (error) {
           detailResult = {
@@ -1261,7 +1271,7 @@ function ensureTruliaEnrichmentBridgeInstalled() {
         completed += 1;
         window.postMessage(
           {
-            type: TRULIA_BRIDGE_PROGRESS_TYPE,
+            type: bridgeProgressType,
             requestId,
             completed,
             total,
@@ -1272,7 +1282,7 @@ function ensureTruliaEnrichmentBridgeInstalled() {
         );
 
         if (index < listingUrls.length - 1) {
-          await delay(TRULIA_DETAIL_DELAY_MS);
+          await delay(detailDelayMs);
         }
       }
 
@@ -1284,7 +1294,7 @@ function ensureTruliaEnrichmentBridgeInstalled() {
         return;
       }
       const data = event.data;
-      if (!data || data.type !== TRULIA_BRIDGE_REQUEST_TYPE) {
+      if (!data || data.type !== bridgeRequestType) {
         return;
       }
 
@@ -1296,7 +1306,7 @@ function ensureTruliaEnrichmentBridgeInstalled() {
       const detailByUrl = await enrichListingUrls(listingUrls, requestId);
       window.postMessage(
         {
-          type: TRULIA_BRIDGE_RESPONSE_TYPE,
+          type: bridgeResponseType,
           requestId,
           detailByUrl
         },
@@ -1307,7 +1317,13 @@ function ensureTruliaEnrichmentBridgeInstalled() {
 
   const script = document.createElement('script');
   script.id = TRULIA_BRIDGE_SCRIPT_ID;
-  script.textContent = `(${installBridge.toString()})();`;
+  script.textContent = `(${installBridge.toString()})(${JSON.stringify({
+    requestType: TRULIA_BRIDGE_REQUEST_TYPE,
+    responseType: TRULIA_BRIDGE_RESPONSE_TYPE,
+    progressType: TRULIA_BRIDGE_PROGRESS_TYPE,
+    detailDelayMs: TRULIA_DETAIL_DELAY_MS,
+    detailTimeoutMs: TRULIA_DETAIL_TIMEOUT_MS
+  })});`;
   (document.head || document.documentElement || document.body).appendChild(script);
   script.remove();
 }
