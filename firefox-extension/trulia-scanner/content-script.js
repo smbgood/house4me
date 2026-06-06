@@ -1548,6 +1548,101 @@ function getTextFromSelectors(container, selectors) {
   return '';
 }
 
+function getFirstSrcFromSrcset(srcsetValue) {
+  if (typeof srcsetValue !== 'string') {
+    return null;
+  }
+  const firstCandidate = srcsetValue
+    .split(',')
+    .map((segment) => normalizeText(segment))
+    .find(Boolean);
+  if (!firstCandidate) {
+    return null;
+  }
+  return firstCandidate.split(/\s+/)[0] ?? null;
+}
+
+function extractCssBackgroundImageUrl(styleValue) {
+  if (typeof styleValue !== 'string') {
+    return null;
+  }
+  const match = styleValue.match(/background-image\s*:\s*url\((['"]?)(.*?)\1\)/i);
+  if (!match || typeof match[2] !== 'string') {
+    return null;
+  }
+  return normalizeText(match[2]);
+}
+
+function isLikelyPlaceholderImageUrl(urlValue) {
+  const normalized = normalizeText(urlValue).toLowerCase();
+  if (!normalized) {
+    return true;
+  }
+  if (normalized.startsWith('data:image/svg')) {
+    return true;
+  }
+  if (normalized.startsWith('data:image/gif')) {
+    return true;
+  }
+  if (/(spacer|pixel|blank|placeholder|sprite|icon)/i.test(normalized)) {
+    return true;
+  }
+  return false;
+}
+
+function resolveListingImageUrl(container, anchor) {
+  const scope = container ?? anchor;
+  if (!scope) {
+    return null;
+  }
+
+  const candidates = new Set();
+  const addCandidate = (value) => {
+    if (typeof value !== 'string') {
+      return;
+    }
+    const normalized = normalizeText(value);
+    if (!normalized || isLikelyPlaceholderImageUrl(normalized)) {
+      return;
+    }
+    const absolute = toAbsoluteUrl(normalized);
+    if (!absolute || isLikelyPlaceholderImageUrl(absolute)) {
+      return;
+    }
+    candidates.add(absolute);
+  };
+
+  const imageNodes = scope.querySelectorAll('img, picture source, [style*="background-image"], [data-bg], [data-background-image]');
+  imageNodes.forEach((node) => {
+    if (node instanceof HTMLImageElement) {
+      addCandidate(node.currentSrc);
+      addCandidate(node.src);
+      addCandidate(node.getAttribute('src'));
+      addCandidate(node.getAttribute('data-src'));
+      addCandidate(node.getAttribute('data-original'));
+      addCandidate(node.getAttribute('data-lazy-src'));
+      addCandidate(getFirstSrcFromSrcset(node.getAttribute('srcset')));
+    } else if (node instanceof HTMLSourceElement) {
+      addCandidate(node.src);
+      addCandidate(node.getAttribute('src'));
+      addCandidate(getFirstSrcFromSrcset(node.srcset));
+      addCandidate(getFirstSrcFromSrcset(node.getAttribute('srcset')));
+    } else {
+      addCandidate(extractCssBackgroundImageUrl(node.getAttribute('style')));
+      addCandidate(node.getAttribute('data-bg'));
+      addCandidate(node.getAttribute('data-background-image'));
+      addCandidate(node.getAttribute('data-src'));
+    }
+  });
+
+  if (candidates.size === 0 && anchor) {
+    addCandidate(anchor.getAttribute('data-image'));
+    addCandidate(anchor.getAttribute('data-img-src'));
+  }
+
+  return [...candidates][0] ?? null;
+}
+
 function getFallbackTitle(containerText) {
   const tokens = containerText
     .split(/\s{2,}|\n+/)
@@ -1571,7 +1666,7 @@ function parseListingFromContainer(anchor, container, source = null) {
     return null;
   }
 
-  const imageElement = container ? container.querySelector('img') : null;
+  const imageUrl = resolveListingImageUrl(container, anchor);
   const explicitTitle = container
     ? getTextFromSelectors(container, ['[data-testid*="title"]', '[class*="title"]', 'h1', 'h2', 'h3'])
     : '';
@@ -1590,7 +1685,7 @@ function parseListingFromContainer(anchor, container, source = null) {
     city: null,
     state: null,
     zip: null,
-    imageUrl: imageElement ? imageElement.src : null,
+    imageUrl,
     rentPrice: parsePriceOrNull(containerText),
     bedrooms: parseFloatOrNull(containerText.match(BEDROOMS_REGEX)),
     bathrooms: parseFloatOrNull(containerText.match(BATHROOMS_REGEX)),
@@ -1716,7 +1811,7 @@ function scrapeRealtorListingsFromPage() {
     }
 
     const cardText = normalizeText(card.innerText);
-    const imageElement = card.querySelector('img');
+    const imageUrl = resolveListingImageUrl(card, anchor);
     const title =
       normalizeText(anchor.getAttribute('aria-label') ?? '') ||
       getTextFromSelectors(card, ['[data-testid*="card-title"]', '[class*="card-title"]', '[class*="title"]']) ||
@@ -1727,7 +1822,7 @@ function scrapeRealtorListingsFromPage() {
       sourceListingId: listingId || null,
       sourcePropertyId: propertyId || null,
       title,
-      imageUrl: imageElement ? imageElement.src : null,
+      imageUrl,
       rentPrice: parsePriceOrNull(cardText),
       bedrooms: parseFloatOrNull(cardText.match(BEDROOMS_REGEX)),
       bathrooms: parseFloatOrNull(cardText.match(BATHROOMS_REGEX)),
@@ -1761,7 +1856,7 @@ function scrapeRealtorListingsFromPage() {
       sourceListingId: null,
       sourcePropertyId: null,
       title: normalizeText(anchor.getAttribute('aria-label') ?? '') || normalizeText(anchor.textContent) || null,
-      imageUrl: container?.querySelector('img')?.src ?? null,
+      imageUrl: resolveListingImageUrl(container, anchor),
       rentPrice: parsePriceOrNull(containerText),
       bedrooms: parseFloatOrNull(containerText.match(BEDROOMS_REGEX)),
       bathrooms: parseFloatOrNull(containerText.match(BATHROOMS_REGEX)),

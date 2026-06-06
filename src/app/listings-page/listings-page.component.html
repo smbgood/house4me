@@ -84,6 +84,18 @@
     <article class="listing" *ngFor="let listing of listings; trackBy: trackById">
       <div class="listing-main">
         <div class="listing-top">
+          <div class="listing-media">
+            <img
+              *ngIf="listing.image_url; else listingImageFallback"
+              [src]="listing.image_url"
+              [alt]="listing.title || 'Listing photo'"
+              loading="lazy"
+              decoding="async"
+            />
+            <ng-template #listingImageFallback>
+              <div class="listing-media-placeholder">No image</div>
+            </ng-template>
+          </div>
           <div class="listing-info">
             <a [href]="listing.listing_url" target="_blank" rel="noopener noreferrer"><h3>{{ listing.title || 'Untitled listing' }}</h3></a>
             <p class="rent">{{ listing.rent_price ? ('$' + listing.rent_price) : 'Price unavailable' }}</p>
